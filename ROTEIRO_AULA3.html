@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLOps Aula 3 — Quando retreinar é a resposta errada</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #050a14; --cyan: #00e5ff; --green: #00ff88; --orange: #ff6b35;
+  --purple: #7c3aed; --pink: #f472b6; --text: #e8f4f8; --muted: #7fa8c0;
+  --card: rgba(255,255,255,0.04); --border: rgba(0,229,255,0.15);
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'IBM Plex Sans',sans-serif; }
+#bg { position:fixed; inset:0; z-index:0; opacity:.3; pointer-events:none; }
+#progress-bar { position:fixed; top:0; left:0; height:3px; z-index:200; background:linear-gradient(90deg, var(--cyan), var(--purple)); transition: width .4s ease; }
+#topbar { position:fixed; top:0; left:0; right:0; height:52px; z-index:150; background:rgba(5,10,20,.88); backdrop-filter:blur(14px); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 32px; }
+.tb-label { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--cyan); letter-spacing:2px; text-transform:uppercase; }
+.tb-counter { font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted); }
+.tb-title { font-size:13px; color:var(--muted); max-width:360px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#slides { position:fixed; inset:0; z-index:1; }
+.slide { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:flex-start; align-items:center; padding:72px 60px 80px; opacity:0; pointer-events:none; transition: opacity .5s ease, transform .5s ease; transform: translateX(60px); overflow-y:auto; }
+.slide.active { opacity:1; pointer-events:all; transform:translateX(0); }
+.slide.prev { opacity:0; pointer-events:none; transform:translateX(-60px); }
+.slide-inner { width:100%; max-width:1080px; margin:auto 0; }
+#nav-prev, #nav-next { position:fixed; top:50%; z-index:200; transform:translateY(-50%); width:48px; height:48px; border-radius:50%; border:1px solid var(--border); background:rgba(5,10,20,.7); backdrop-filter:blur(8px); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--cyan); transition:all .2s; user-select:none; }
+#nav-prev { left:16px; } #nav-next { right:16px; }
+#nav-prev:hover, #nav-next:hover { background:rgba(0,229,255,.12); border-color:var(--cyan); }
+#nav-prev.disabled, #nav-next.disabled { opacity:.25; pointer-events:none; }
+#dots { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:200; flex-wrap:wrap; max-width:70%; justify-content:center; }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--muted); opacity:.4; cursor:pointer; transition:all .3s; }
+.dot.active { background:var(--cyan); opacity:1; transform:scale(1.3); }
+.dot.done { background:var(--green); opacity:.8; }
+
+.tag  { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--cyan);   letter-spacing:3px; text-transform:uppercase; margin-bottom:10px; display:block; }
+.gtag { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--green);  letter-spacing:3px; text-transform:uppercase; margin-bottom:10px; display:block; }
+.ptag { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--purple); letter-spacing:3px; text-transform:uppercase; margin-bottom:10px; display:block; }
+.otag { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--orange); letter-spacing:3px; text-transform:uppercase; margin-bottom:10px; display:block; }
+
+h1.hero-title { font-family:'Syne',sans-serif; font-size:clamp(2.2rem,4.6vw,4rem); font-weight:800; line-height:1.08; margin-bottom:20px; }
+h2.sec-title  { font-family:'Syne',sans-serif; font-size:clamp(1.4rem,3vw,2.3rem); font-weight:800; line-height:1.18; margin-bottom:12px; }
+h3.slide-h3   { font-family:'Syne',sans-serif; font-size:1.15rem; font-weight:700; margin-bottom:14px; }
+p.lead { color:var(--muted); font-size:.98rem; line-height:1.7; margin-bottom:22px; }
+
+.badge { display:inline-flex; align-items:center; gap:8px; background:rgba(0,229,255,.08); border:1px solid var(--border); border-radius:20px; padding:6px 16px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--cyan); letter-spacing:1px; margin-bottom:26px; width:fit-content; }
+.badge::before { content:''; width:7px; height:7px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.5)} }
+.hero-q { background:linear-gradient(135deg,rgba(0,229,255,.06),rgba(124,58,237,.06)); border:1px solid rgba(0,229,255,.2); border-left:4px solid var(--cyan); border-radius:12px; padding:20px 26px; font-size:1.02rem; color:var(--text); max-width:800px; margin-top:6px; animation:fadeUp .8s ease both .3s; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+.card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px; }
+.g2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+@media(max-width:680px){.g2,.g3{grid-template-columns:1fr}}
+.pill-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+.pill { background:rgba(0,255,136,.07); border:1px solid rgba(0,255,136,.25); border-radius:20px; padding:5px 14px; font-size:12px; color:var(--green); font-family:'IBM Plex Mono',monospace; }
+.bridge { background:linear-gradient(135deg,rgba(0,229,255,.05),rgba(124,58,237,.05)); border:1px solid rgba(0,229,255,.2); border-radius:14px; padding:22px 26px; }
+
+.bloco-mark { display:inline-flex; align-items:center; gap:10px; margin-bottom:14px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:2.5px; text-transform:uppercase; border-radius:20px; padding:5px 15px; }
+.bl-a { background:rgba(0,229,255,.09);  border:1px solid rgba(0,229,255,.35);  color:var(--cyan); }
+.bl-b { background:rgba(255,107,53,.09); border:1px solid rgba(255,107,53,.35); color:var(--orange); }
+.bl-c { background:rgba(0,255,136,.08);  border:1px solid rgba(0,255,136,.32);  color:var(--green); }
+
+.tbl { width:100%; border-collapse:collapse; font-size:.82rem; }
+.tbl th { text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--cyan); padding:9px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.tbl td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.05); color:var(--muted); vertical-align:top; line-height:1.5; }
+.tbl td strong, .tbl td code { color:var(--text); }
+.tbl td code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3); padding:1px 6px; border-radius:4px; font-size:.78rem; }
+.tbl tbody tr:hover td { background:rgba(0,229,255,.03); }
+.tbl tr.sep-a td { background:rgba(0,229,255,.05); }
+.tbl tr.sep-c td { background:rgba(0,255,136,.04); }
+
+.code { background:rgba(0,0,0,.42); border:1px solid var(--border); border-radius:10px; padding:14px 18px; font-family:'IBM Plex Mono',monospace; font-size:.74rem; line-height:1.7; overflow-x:auto; white-space:pre; color:#bfe4f2; max-height:52vh; overflow-y:auto; }
+.code .k { color:var(--pink); }
+.code .s { color:var(--green); }
+.code .c { color:var(--muted); font-style:italic; }
+.code .h { color:var(--cyan); font-weight:500; }
+.code .o { color:var(--orange); }
+.code-wrap { border:1px solid var(--border); border-radius:9px; overflow:hidden; margin-bottom:14px; transition:border-color .2s, box-shadow .2s; }
+.code-wrap.open { border-color:var(--cyan); box-shadow:0 0 0 1px rgba(0,229,255,.08); }
+.code-header { display:flex; justify-content:space-between; align-items:center; padding:9px 14px; background:rgba(0,0,0,.55); border-bottom:1px solid var(--border); cursor:pointer; user-select:none; transition:background .15s; gap:12px; }
+.code-header:hover { background:rgba(0,229,255,.06); }
+.code-header .fname { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--cyan); }
+.code-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.code-header .lbadge { font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+.code-toggle-btn { font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.5px; color:var(--cyan); border:1px solid var(--border); border-radius:20px; padding:3px 11px; white-space:nowrap; transition:.2s; background:rgba(0,229,255,.05); }
+.code-toggle-btn::before { content:'▸ '; }
+.code-wrap.open .code-toggle-btn { color:var(--bg); background:var(--green); border-color:var(--green); font-weight:600; }
+.code-wrap.open .code-toggle-btn::before { content:'▾ '; }
+.copy-btn { font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.5px; color:var(--purple); border:1px solid rgba(124,58,237,.4); border-radius:20px; padding:3px 11px; white-space:nowrap; transition:.2s; background:rgba(124,58,237,.08); cursor:pointer; display:none; }
+.copy-btn:hover { background:rgba(124,58,237,.2); color:var(--pink); }
+.copy-btn.done { color:var(--bg); background:var(--green); border-color:var(--green); font-weight:600; }
+.code-wrap.open .copy-btn { display:inline-block; }
+.code-wrap .code { display:none; border:none; border-radius:0; }
+.code-wrap.open .code { display:block; animation:codeIn .28s ease; }
+@keyframes codeIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+
+.step-marker { display:flex; align-items:center; gap:16px; margin-bottom:18px; }
+.step-num { font-family:'Syne',sans-serif; font-weight:800; font-size:1.6rem; width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; background:rgba(0,229,255,.08); border:1px solid var(--border); color:var(--cyan); flex-shrink:0; }
+.step-num.b { background:rgba(255,107,53,.08); border-color:rgba(255,107,53,.3); color:var(--orange); }
+.step-num.c { background:rgba(0,255,136,.07); border-color:rgba(0,255,136,.3); color:var(--green); }
+.step-meta { display:flex; flex-direction:column; gap:2px; }
+.step-file { font-family:'IBM Plex Mono',monospace; font-size:.92rem; color:var(--text); }
+.step-obj { font-size:.78rem; color:var(--muted); }
+
+.callout { border-left:3px solid; border-radius:0 8px 8px 0; padding:12px 16px; margin:12px 0 0; font-size:.83rem; line-height:1.6; }
+.callout .ct { font-family:'IBM Plex Mono',monospace; font-weight:500; font-size:9.5px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:5px; }
+.callout p { margin:0; color:var(--muted); font-size:.83rem; }
+.callout p + p { margin-top:8px; }
+.callout code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3); padding:1px 6px; border-radius:4px; color:var(--text); font-size:.78rem; }
+.co-ok   { border-color:var(--green);  background:rgba(0,255,136,.05); } .co-ok .ct { color:var(--green); }
+.co-warn { border-color:var(--orange); background:rgba(255,107,53,.05); } .co-warn .ct { color:var(--orange); }
+.co-info { border-color:var(--purple); background:rgba(124,58,237,.06); } .co-info .ct { color:#c4b5fd; }
+.co-err  { border-color:#ff4d6d; background:rgba(255,77,109,.06); } .co-err .ct { color:#ff8fa3; }
+
+.test-box { background:rgba(0,255,136,.04); border:1px solid rgba(0,255,136,.22); border-radius:12px; padding:16px 20px; margin-bottom:12px; }
+.test-box .tt { font-family:'Syne',sans-serif; font-weight:800; font-size:.88rem; color:var(--green); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+.test-box ol, .test-box ul { margin-left:18px; }
+.test-box li { font-size:.83rem; color:var(--muted); line-height:1.65; margin-bottom:4px; }
+.test-box li strong, .test-box li code { color:var(--text); }
+.test-box code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3); padding:1px 6px; border-radius:4px; font-size:.78rem; }
+
+.qa { width:100%; border-collapse:collapse; font-size:.82rem; }
+.qa td { padding:10px; border-bottom:1px solid rgba(255,255,255,.06); color:var(--muted); vertical-align:top; line-height:1.55; }
+.qa td.n { color:var(--green); font-family:'IBM Plex Mono',monospace; width:26px; text-align:center; }
+.qa tr:last-child td { border-bottom:none; }
+.acao { color:var(--text); font-size:.85rem; }
+.qa code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3); padding:1px 6px; border-radius:4px; color:var(--text); font-size:.76rem; }
+
+.final-check { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+.fc-item { display:flex; align-items:center; gap:12px; padding:9px 16px; background:var(--card); border:1px solid var(--border); border-radius:10px; opacity:0; transform:translateX(-16px); }
+.final-check.play .fc-item { animation:fcIn .5s ease forwards; }
+.final-check.play .fc-item:nth-child(1){animation-delay:.04s}
+.final-check.play .fc-item:nth-child(2){animation-delay:.12s}
+.final-check.play .fc-item:nth-child(3){animation-delay:.20s}
+.final-check.play .fc-item:nth-child(4){animation-delay:.28s}
+.final-check.play .fc-item:nth-child(5){animation-delay:.36s}
+.final-check.play .fc-item:nth-child(6){animation-delay:.44s}
+.final-check.play .fc-item:nth-child(7){animation-delay:.52s}
+.final-check.play .fc-item:nth-child(8){animation-delay:.60s}
+.final-check.play .fc-item:nth-child(9){animation-delay:.68s}
+.final-check.play .fc-item:nth-child(10){animation-delay:.76s}
+.final-check.play .fc-item:nth-child(11){animation-delay:.84s}
+.final-check.play .fc-item:nth-child(12){animation-delay:.92s}
+.final-check.play .fc-item:nth-child(13){animation-delay:1.00s}
+.final-check.play .fc-item:nth-child(14){animation-delay:1.08s}
+.final-check.play .fc-item:nth-child(15){animation-delay:1.16s}
+.final-check.play .fc-item:nth-child(13){animation-delay:1.00s}
+@keyframes fcIn { to{opacity:1;transform:translateX(0)} }
+.fc-check { width:20px; height:20px; border-radius:50%; border:1px solid var(--green); color:var(--green); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; }
+.fc-text { font-size:.82rem; color:var(--text); font-family:'IBM Plex Mono',monospace; }
+
+.yn { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:680px){ .yn{ grid-template-columns:1fr; } }
+.yn-col { border-radius:14px; padding:18px 20px; }
+.yn-yes { background:rgba(0,255,136,.05); border:1px solid rgba(0,255,136,.22); }
+.yn-no  { background:rgba(255,107,53,.05); border:1px solid rgba(255,107,53,.22); }
+.yn-col h4 { font-family:'Syne',sans-serif; font-size:.92rem; margin-bottom:12px; }
+.yn-col li { list-style:none; font-size:.82rem; color:var(--muted); line-height:1.55; padding:5px 0 5px 20px; position:relative; }
+.yn-yes li::before { content:'✓'; position:absolute; left:0; color:var(--green); }
+.yn-no  li::before { content:'✕'; position:absolute; left:0; color:var(--orange); }
+
+.next-pills { display:flex; flex-wrap:wrap; gap:10px; }
+.next-pill { font-family:'IBM Plex Mono',monospace; font-size:11.5px; padding:8px 15px; border-radius:20px; background:rgba(124,58,237,.08); border:1px solid rgba(124,58,237,.3); color:var(--pink); }
+.slide-scroll { overflow-y:auto; }
+.divider { height:1px; background:var(--border); margin:18px 0; }
+code.inline { font-family:'IBM Plex Mono',monospace; color:var(--cyan); background:rgba(0,229,255,.06); padding:1px 7px; border-radius:5px; font-size:.86em; }
+
+.ciclo { display:flex; align-items:stretch; gap:8px; flex-wrap:wrap; margin:10px 0 6px; }
+.ci-step { flex:1; min-width:132px; border-radius:12px; padding:14px; background:var(--card); border:1px solid var(--border); font-family:'IBM Plex Mono',monospace; font-size:.72rem; color:var(--muted); line-height:1.5; }
+.ci-step .ci-n { display:block; font-size:.68rem; letter-spacing:1.5px; margin-bottom:6px; opacity:.75; }
+.ci-step .ci-t { display:block; font-size:.86rem; color:var(--text); margin-bottom:5px; font-family:'Syne',sans-serif; font-weight:700; }
+.ci-a { border-color:rgba(0,229,255,.4);  background:rgba(0,229,255,.06); } .ci-a .ci-n { color:var(--cyan); }
+.ci-b { border-color:rgba(255,107,53,.4); background:rgba(255,107,53,.06); } .ci-b .ci-n { color:var(--orange); }
+.ci-c { border-color:rgba(0,255,136,.35); background:rgba(0,255,136,.05); } .ci-c .ci-n { color:var(--green); }
+
+.cadeia { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:12px 0 4px; }
+.cd-box { flex:1; min-width:150px; border-radius:10px; padding:13px 15px; text-align:center; background:rgba(255,77,109,.06); border:1px solid rgba(255,77,109,.28); font-family:'IBM Plex Mono',monospace; font-size:.74rem; color:#ffb3c1; line-height:1.5; }
+.cd-box.fim { background:rgba(255,77,109,.14); border-color:rgba(255,77,109,.5); color:#ff8fa3; font-weight:600; }
+.cd-arrow { color:#ff8fa3; font-size:1.3rem; flex-shrink:0; }
+@media(max-width:780px){ .cd-arrow{ transform:rotate(90deg); } }
+
+.juiz { background:rgba(0,255,136,.04); border:1px solid rgba(0,255,136,.22);
+        border-radius:14px; padding:18px 22px; margin:14px 0 20px; }
+.juiz h4 { font-family:'Syne',sans-serif; font-size:1rem; color:var(--green); margin-bottom:10px; }
+.juiz p { color:var(--muted); font-size:.86rem; line-height:1.7; }
+.juiz ol { margin:10px 0 12px 18px; }
+.juiz li { color:var(--muted); font-size:.85rem; line-height:1.65; margin-bottom:8px; }
+.juiz li b, .juiz p b { color:var(--text); }
+.juiz code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3);
+             padding:1px 6px; border-radius:4px; color:var(--text); font-size:.8rem; }
+.juiz .ressalva { border-left:2px solid var(--orange); padding-left:12px; margin-top:12px;
+                  font-size:.83rem; }
+
+.ui-tour { display:flex; flex-direction:column; gap:12px; margin:14px 0 18px; }
+.ui-item { display:flex; gap:14px; background:var(--card); border:1px solid var(--border);
+           border-radius:12px; padding:15px 18px; }
+.ui-n { font-family:'Syne',sans-serif; font-weight:800; font-size:1.1rem; width:32px; height:32px;
+        border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+        background:rgba(0,229,255,.1); border:1px solid var(--border); color:var(--cyan); }
+.ui-item h4 { font-family:'Syne',sans-serif; font-size:.95rem; margin-bottom:6px; }
+.ui-item p { color:var(--muted); font-size:.84rem; line-height:1.65; margin:0; }
+.ui-item p b { color:var(--text); }
+.ui-item code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.3);
+                padding:1px 6px; border-radius:4px; color:var(--text); font-size:.78rem; }
+.ui-q { margin-top:8px !important; color:var(--cyan) !important; font-size:.8rem !important; }
+.ui-q i { font-style:italic; opacity:.85; }
+
+.email { background:rgba(255,255,255,.03); border:1px solid var(--border);
+         border-left:3px solid var(--orange); border-radius:0 12px 12px 0;
+         padding:18px 22px; margin:14px 0 18px; }
+.em-cab { display:flex; flex-direction:column; gap:3px; padding-bottom:10px; margin-bottom:12px;
+          border-bottom:1px solid var(--border); font-family:'IBM Plex Mono',monospace;
+          font-size:11px; color:var(--muted); }
+.em-cab b { color:var(--orange); font-weight:500; }
+.email p { color:#d3e6ef; font-size:.88rem; line-height:1.75; margin-bottom:10px; }
+.email p:last-child { margin-bottom:0; }
+
+.hip { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0 18px; }
+@media(max-width:700px){ .hip{ grid-template-columns:1fr; } }
+.hip-item { display:flex; gap:13px; background:var(--card); border:1px solid var(--border);
+            border-radius:12px; padding:15px 17px; }
+.hip-n { font-family:'Syne',sans-serif; font-weight:800; font-size:1.1rem; width:30px; height:30px;
+         border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+         background:rgba(124,58,237,.12); border:1px solid rgba(124,58,237,.35); color:#c4b5fd; }
+.hip-item h4 { font-family:'Syne',sans-serif; font-size:.9rem; margin-bottom:5px; }
+.hip-item p { color:var(--muted); font-size:.8rem; line-height:1.6; margin:0; }
+.hip-item p b { color:var(--text); }
+.hip-acao { margin-top:7px !important; color:var(--cyan) !important; font-size:.78rem !important;
+            font-family:'IBM Plex Mono',monospace; }
+
+.ev { display:flex; flex-direction:column; gap:11px; margin:14px 0 18px; }
+.ev-item { display:flex; gap:14px; background:rgba(0,255,136,.04);
+           border:1px solid rgba(0,255,136,.2); border-radius:12px; padding:15px 18px; }
+.ev-n { font-family:'Syne',sans-serif; font-weight:800; font-size:1rem; width:28px; height:28px;
+        border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+        background:rgba(0,255,136,.1); border:1px solid rgba(0,255,136,.35); color:var(--green); }
+.ev-item h4 { font-family:'Syne',sans-serif; font-size:.92rem; margin-bottom:6px; }
+.ev-item p { color:var(--muted); font-size:.83rem; line-height:1.65; margin:0; }
+.ev-item code { font-family:'IBM Plex Mono',monospace; background:rgba(0,0,0,.35);
+                padding:1px 6px; border-radius:4px; color:var(--text); font-size:.78rem; }
+.ev-conc { margin-top:7px !important; padding-left:11px; border-left:2px solid var(--green); }
+.ev-conc b { color:var(--green); }
+
+.lacuna { background:linear-gradient(135deg,rgba(255,107,53,.06),rgba(124,58,237,.06));
+          border:1px solid rgba(255,107,53,.25); border-radius:14px; padding:18px 22px; }
+.lacuna h4 { font-family:'Syne',sans-serif; font-size:1rem; color:var(--orange); margin-bottom:10px; }
+.lacuna h4 i { font-style:italic; }
+.lacuna p { color:var(--muted); font-size:.86rem; line-height:1.72; margin-bottom:10px; }
+.lacuna p b { color:var(--text); }
+.lac-fecho { border-left:2px solid var(--orange); padding-left:12px; margin-bottom:0 !important;
+             color:var(--text) !important; }
+
+.dois-mundos { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0; }
+@media(max-width:700px){ .dois-mundos{ grid-template-columns:1fr; } }
+.dm-col { background:var(--card); border:1px solid var(--border); border-radius:13px; padding:17px 20px; }
+.dm-col.destaque { background:rgba(0,229,255,.06); border-color:rgba(0,229,255,.35); }
+.dm-col h4 { font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:1.8px;
+             text-transform:uppercase; color:var(--muted); margin-bottom:11px; }
+.dm-col.destaque h4 { color:var(--cyan); }
+.dm-q { font-size:.95rem; color:var(--text); line-height:1.55; margin-bottom:10px;
+        font-family:'Syne',sans-serif; }
+.dm-r { color:var(--muted); font-size:.83rem; line-height:1.65; margin:0; }
+
+.agflow { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; margin:6px 0 4px; }
+.agnode { flex:1; min-width:140px; border-radius:12px; padding:14px 16px; font-family:'IBM Plex Mono',monospace; font-size:.76rem; text-align:center; background:var(--card); border:1px solid var(--border); color:var(--muted); }
+.agnode .an-name { font-size:.86rem; color:var(--text); display:block; margin-bottom:6px; }
+.agnode.has  { background:rgba(0,255,136,.06); border-color:rgba(0,255,136,.35); } .agnode.has .an-name { color:var(--green); }
+.agnode.hasnt { background:rgba(255,107,53,.05); border-color:rgba(255,107,53,.25); } .agnode.hasnt .an-name { color:var(--orange); }
+@media(prefers-reduced-motion:reduce){ .slide,.fc-item,.badge::before{ transition:none!important; animation:none!important; } }
+
+/* ═══════════════════ widgets interativos ═══════════════════ */
+.wid { background:rgba(0,0,0,.28); border:1px solid var(--border); border-radius:14px;
+       padding:16px 18px; margin:14px 0 18px; }
+.wid-cab { display:flex; justify-content:space-between; align-items:baseline;
+           gap:14px; flex-wrap:wrap; margin-bottom:12px; }
+.wid-cab h4 { font-family:'Syne',sans-serif; font-size:.95rem; }
+.wid-cab span { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--cyan);
+                letter-spacing:1.6px; text-transform:uppercase; }
+.wid svg { width:100%; height:auto; display:block; }
+.wid-ctrl { display:flex; gap:20px; flex-wrap:wrap; align-items:center; margin:12px 0 4px; }
+.wid-ctrl label { display:flex; flex-direction:column; gap:4px; flex:1; min-width:170px;
+                  font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--muted); }
+.wid input[type=range] { width:100%; accent-color:var(--cyan); }
+.wid-num { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+.wid-num div { flex:1; min-width:104px; background:var(--card); border:1px solid var(--border);
+               border-radius:9px; padding:9px 12px; }
+.wid-num b { display:block; font-family:'IBM Plex Mono',monospace; font-size:1.05rem;
+             color:var(--text); }
+.wid-num span { font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--muted);
+                letter-spacing:1.1px; text-transform:uppercase; }
+.w-ver { margin-top:11px; padding:9px 13px; border-radius:8px; font-size:.83rem;
+         line-height:1.6; border-left:3px solid; }
+.w-ver b { color:var(--text); }
+.w-ver.alto { border-color:var(--orange); background:rgba(255,107,53,.07); color:#ffc4a8; }
+.w-ver.baixo { border-color:var(--green); background:rgba(0,255,136,.06); color:#9fffcb; }
+.dr-btns { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.dr-btn { font-family:'IBM Plex Mono',monospace; font-size:11px; padding:6px 14px;
+          border-radius:20px; border:1px solid var(--border); background:transparent;
+          color:var(--muted); cursor:pointer; transition:.15s; }
+.dr-btn:hover { color:var(--text); border-color:var(--cyan); }
+.dr-btn.ativo { background:rgba(0,229,255,.13); border-color:var(--cyan); color:var(--cyan); }
+.dr-txt { margin-top:11px; font-size:.85rem; line-height:1.68; color:var(--muted);
+          padding-left:12px; border-left:2px solid var(--purple); }
+.dr-txt b { color:var(--text); }
+
+.portao-sim{padding:4px 2px 2px}
+.ps-topo{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;margin-bottom:22px}
+.ps-arquivos{display:flex;gap:8px;flex-wrap:wrap}
+.ps-arq{background:rgba(255,255,255,.04);border:1px solid rgba(0,229,255,.22);
+  border-radius:8px;padding:7px 13px;cursor:pointer;color:var(--text);
+  font-family:inherit;text-align:left;line-height:1.25;transition:all .18s}
+.ps-arq b{display:block;font-size:12.5px;font-weight:600}
+.ps-arq span{font-size:10.5px;color:var(--muted)}
+.ps-arq:hover{border-color:var(--cyan);background:rgba(0,229,255,.08)}
+.ps-arq.ativo{border-color:var(--cyan);background:rgba(0,229,255,.13)}
+.ps-switch{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);
+  cursor:pointer;user-select:none}
+.ps-switch input{accent-color:var(--cyan);width:15px;height:15px;cursor:pointer}
+
+.ps-pista{position:relative;height:96px;display:flex;align-items:center;
+  justify-content:space-between;padding:0 4px;
+  background:linear-gradient(180deg,transparent 46%,rgba(0,229,255,.13) 46%,
+    rgba(0,229,255,.13) 54%,transparent 54%)}
+.ps-marco,.ps-portao{position:relative;z-index:2;background:var(--bg);
+  border:1px solid rgba(0,229,255,.25);border-radius:8px;padding:9px 12px;
+  text-align:center;line-height:1.3;min-width:104px}
+.ps-marco b,.ps-portao b{display:block;font-size:11.5px;font-weight:600}
+.ps-marco span,.ps-portao span{font-size:10px;color:var(--muted)}
+.ps-portao{border-width:2px;transition:border-color .3s,box-shadow .3s,background .3s}
+.ps-portao.aberto{border-color:var(--green);box-shadow:0 0 22px rgba(0,255,136,.28);
+  background:rgba(0,255,136,.07)}
+.ps-portao.fechado{border-color:var(--orange);box-shadow:0 0 22px rgba(255,107,53,.3);
+  background:rgba(255,107,53,.08)}
+.ps-portao.desligado{border-style:dashed;border-color:rgba(127,168,192,.35);opacity:.55}
+
+.ps-pacote{position:absolute;left:11%;top:31px;z-index:3;transform:translateX(-50%);
+  width:56px;height:34px;border-radius:6px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;font-weight:600;color:#04121a;background:var(--cyan);
+  box-shadow:0 4px 14px rgba(0,229,255,.3);opacity:0;
+  transition:left 1s cubic-bezier(.45,.05,.3,1),top .75s ease-in,
+             opacity .35s,background .3s}
+.ps-pacote span{font-size:8.5px;font-weight:400;opacity:.8}
+.ps-pacote.ruim{background:var(--orange);box-shadow:0 4px 14px rgba(255,107,53,.35)}
+
+.ps-quar{margin-top:6px;border:1px dashed rgba(255,107,53,.4);border-radius:8px;
+  padding:9px 13px;text-align:center;line-height:1.35;
+  background:rgba(255,107,53,.05);transition:all .3s;opacity:.5}
+.ps-quar.cheia{opacity:1;border-style:solid;box-shadow:0 0 18px rgba(255,107,53,.18)}
+.ps-quar b{display:block;font-size:11.5px;color:var(--orange)}
+.ps-quar span{font-size:10.5px;color:var(--muted)}
+
+.ps-saida{margin-top:16px;min-height:96px;border-top:1px solid rgba(0,229,255,.14);
+  padding-top:14px;font-size:12.6px;line-height:1.65}
+.ps-saida .ps-vazio{color:var(--muted);font-style:italic}
+.ps-linha{display:flex;gap:10px;margin-bottom:7px}
+.ps-rot{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--cyan);
+  min-width:112px;text-transform:uppercase;letter-spacing:.8px;padding-top:2px}
+.ps-val{color:var(--text);flex:1}
+.ps-val.bom{color:var(--green)}
+.ps-val.ruim{color:var(--orange)}
+.ps-fecho{margin-top:11px;padding:9px 12px;border-radius:0 6px 6px 0;font-size:12.4px}
+.ps-fecho.retido{border-left:3px solid var(--orange);background:rgba(255,107,53,.08)}
+.ps-fecho.passou{border-left:3px solid var(--green);background:rgba(0,255,136,.07)}
+.ps-fecho.perigo{border-left:3px solid var(--orange);background:rgba(255,107,53,.12)}
+@media(max-width:700px){
+  .ps-pista{flex-direction:column;height:auto;gap:10px;background:none}
+  .ps-pacote{display:none}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+<div id="progress-bar"></div>
+
+<div id="topbar">
+  <span class="tb-label">⬡ MLOps · Aula 3 — Quando retreinar é a resposta errada</span>
+  <span class="tb-title" id="slide-title-bar"></span>
+  <span class="tb-counter" id="slide-counter"></span>
+</div>
+
+<div id="nav-prev">←</div>
+<div id="nav-next">→</div>
+<div id="dots"></div>
+
+<div id="slides">
+
+<div class="slide" data-title="Abertura">
+<div class="slide-inner slide-scroll">
+
+
+  <div class="badge">BUG DE ENCANAMENTO · CONTRATO DE DADOS · QUARENTENA</div>
+  <h1 class="hero-title">Chegou março.<br>E a faixa de alerta <span style="color:var(--orange)">esvaziou</span>.</h1>
+  <p class="lead" style="max-width:800px;">A v2 está em produção desde a aula passada, promovida pelo conjunto de aceitação. O arquivo de março entrou pela API e a faixa de alerta caiu de <b>303 para 72 nomes</b> — 77% a menos. <strong style="color:var(--text)">O reflexo que você treinou mês passado é exatamente o que não se deve fazer hoje.</strong></p>
+  <div class="hero-q">📌 <strong>O que esta aula prova:</strong> nem tudo que se parece com drift é drift. O relatório vai mostrar KS altíssimo, igual ao de fevereiro — e a ação certa é a oposta. <u>Drift é o mundo mudando; bug é o seu retrato do mundo mudando.</u></div>
+  <div class="pill-row" style="margin-top:22px;">
+    <div class="pill">🔢 fatores redondos</div>
+    <div class="pill">🧮 contagens intactas</div>
+    <div class="pill">⭕ zeros idênticos</div>
+    <div class="pill">🚫 nenhuma versão nova</div>
+  </div>
+  <div class="callout co-warn" style="max-width:800px;">
+    <div class="ct">Antes de começar, confira o estado — no front</div>
+    <p>Suba os dois terminais e abra <b>127.0.0.1:8000</b>. O cabeçalho da página tem que dizer <code>modelo v2 · @champion · 15 features</code>. Se disser v1, alguém não clicou em <b>Recarregar modelo</b> depois da promoção da Aula 2 — resolva isso antes, senão você vai diagnosticar o problema errado.</p>
+    <p>O fechamento de fevereiro com a v2, para comparar: <strong style="color:var(--text)">taxa positiva 0,5193 · F1 0,6865 · recall 0,7464 · 303 na faixa de alerta</strong>.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="O chamado">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">o que chegou</span>
+  <h2 class="sec-title">O que a Marina escreveu</h2>
+
+  <div class="email">
+    <div class="em-cab">
+      <span><b>De:</b> Marina · RH Corporativo</span>
+      <span><b>Assunto:</b> A lista de março veio pela metade — foi o modelo novo?</span>
+    </div>
+    <p>A lista de risco de março entrou no sistema no fim de semana e a faixa de <b>alerta</b> veio com <b>72 nomes</b>. Em fevereiro tinham sido <b>303</b>. A faixa de atenção até cresceu, mas é o alerta que o meu time trabalha primeiro.</p>
+    <p>Meu primeiro pensamento foi: "eles mexeram no modelo mês passado, deve ser isso". Mas antes de escrever eu fui conferir com os gerentes de unidade. O retorno foi unânime: <u>não mudou nada aqui</u>. É a mesma gente, a mesma escala 12x36 em Dourados, o mesmo ritmo de hora extra — inclusive teve fechamento puxado na última semana.</p>
+    <p>Se o problema for o modelo novo, <b>voltem para o anterior</b>. Se não for, me expliquem o que foi de um jeito que eu consiga levar para a diretoria na quinta.</p>
+    <p style="opacity:.85">PS: o pessoal do sistema de ponto mandou um comunicado no dia 28 falando de "atualização da rotina de exportação". Não entendi e arquivei. Estou reencaminhando, caso sirva.</p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">O anexo que ela achou que não era nada</div>
+    <p><i>"Informamos que a versão 4.2 da rotina de exportação entrou em produção nesta data, trazendo melhorias de padronização dos campos de apontamento e <b>adequação aos padrões internos de precisão numérica</b>. Não é necessária nenhuma ação por parte dos clientes."</i></p>
+    <p style="margin-top:8px">Guarde a frase. Ela não prova nada sozinha — comunicado de fornecedor nunca prova. Mas daqui a vinte minutos você vai saber exatamente o que "precisão numérica" queria dizer.</p>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">O pedido que você não vai atender</div>
+    <p>"Se o problema for o modelo novo, voltem para o anterior." Reverter é legítimo e barato — é mover um alias. Mas reverter <u>antes</u> de saber a causa é trocar um problema que você não entende por outro que você também não vai entender. <b>Dois fatos são verdade ao mesmo tempo:</b> vocês realmente publicaram a v2, e a Marina realmente não mudou nada. É isso que torna o dia difícil.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Passo 0 · O front responde">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-a">Bloco A · observar</span>
+  <div class="step-marker">
+    <div class="step-num ">0</div>
+    <div class="step-meta">
+      <span class="step-file">O front, antes de qualquer terminal</span>
+      <span class="step-obj">Trinta segundos que eliminam a hipótese mais comum.</span>
+    </div>
+  </div>
+
+  <p class="lead">Abra <b>127.0.0.1:8000</b>. Tudo que você precisa para eliminar uma das quatro hipóteses está no cabeçalho da página — não é preciso abrir terminal nenhum.</p>
+
+  <div class="ui-tour">
+    <div class="ui-item">
+      <div class="ui-n">1</div>
+      <div>
+        <h4>O cabeçalho: <code>modelo v2 · @champion · 15 features</code></h4>
+        <p>A API lê o registry pelo <b>alias</b> a cada boot e mostra qual número está por trás dele. Se aqui aparecer v1, a produção está servindo o modelo antigo e o seu problema é outro.</p>
+        <p class="ui-q">Responde: <i>alguém publicou alguma coisa entre fevereiro e março?</i></p>
+      </div>
+    </div>
+    <div class="ui-item">
+      <div class="ui-n">2</div>
+      <div>
+        <h4>A tabela <b>Lotes já pontuados</b></h4>
+        <p>Uma linha por lote, com a versão que respondeu. <code>lote_aula2_fev → v1</code>, <code>lote_aula3_mar → v2</code>. É o log de predições do Postgres aparecendo na tela.</p>
+        <p class="ui-q">Responde: <i>o arquivo de março chegou mesmo? quem pontuou?</i></p>
+      </div>
+    </div>
+    <div class="ui-item">
+      <div class="ui-n">3</div>
+      <div>
+        <h4>O botão <b>Recarregar modelo</b></h4>
+        <p>A API mantém o modelo em memória. Se alguém moveu o alias e ninguém recarregou, o cabeçalho e a realidade discordam. Clique antes de concluir qualquer coisa.</p>
+        <p class="ui-q">Responde: <i>o que está na tela é o que está atendendo?</i></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout co-ok">
+    <div class="ct">Resultado do Passo 0</div>
+    <p>O cabeçalho diz <b>v2 · @champion</b>, e é a mesma versão que atendeu fevereiro. <b>Ninguém publicou nada entre um arquivo e outro.</b> Isso não inocenta a v2, mas elimina a hipótese D — e essa é a primeira coisa que qualquer plantão checa, porque custa trinta segundos.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="As quatro hipóteses">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">antes de medir</span>
+  <h2 class="sec-title">As mesmas quatro. Mudou qual vence.</h2>
+  <p class="lead">Fevereiro te ensinou a percorrer esta lista. Hoje ela é idêntica — e é justamente por isso que a aula é perigosa: a resposta de fevereiro está fresca na cabeça de todo mundo.</p>
+
+  <div class="hip">
+    <div class="hip-item">
+      <div class="hip-n">A</div>
+      <div><h4>Mudou a população</h4>
+      <p>Entrou ou saiu gente diferente. As features mudam de forma <b>e</b> as contagens de eventos acompanham. Fatores irregulares, zeros deslocados.</p>
+      <p class="hip-acao">→ retreinar, incorporando o novo</p></div>
+    </div>
+    <div class="hip-item">
+      <div class="hip-n">B</div>
+      <div><h4>Mudou a unidade do dado</h4>
+      <p>As mesmas pessoas, os mesmos eventos, valores em outra escala. Fatores <b>redondos</b> (60, 100, 1/60) e percentual de zeros idêntico.</p>
+      <p class="hip-acao">→ corrigir a origem. Nenhuma versão nova</p></div>
+    </div>
+    <div class="hip-item">
+      <div class="hip-n">C</div>
+      <div><h4>Bug no pipeline</h4>
+      <p>Coluna trocada, join duplicando linha, janela temporal errada, nulo virando zero. Costuma ser <b>sujo</b>: some coluna, aparece NaN, a contagem de linhas muda.</p>
+      <p class="hip-acao">→ achar e consertar o código</p></div>
+    </div>
+    <div class="hip-item">
+      <div class="hip-n">D</div>
+      <div><h4>Versão errada em produção</h4>
+      <p>Publicaram sem querer outra versão, ou o alias aponta para onde não devia.</p>
+      <p class="hip-acao">→ conferir o front e reverter</p></div>
+    </div>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Onde estamos</div>
+    <p>O Passo 0 já derrubou <b>D</b> no cabeçalho da página. Sobram três — e nenhuma delas se resolve olhando o tamanho da queda. <b>O tamanho diz que algo aconteceu; a forma diz o quê.</b></p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Passo 1 · Sem rótulo">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-a">Bloco A · observar</span>
+  <div class="step-marker">
+    <div class="step-num ">1</div>
+    <div class="step-meta">
+      <span class="step-file">O que dá para dizer hoje</span>
+      <span class="step-obj">O rótulo de março só existe em junho. Sobram P(X) e P(ŷ).</span>
+    </div>
+  </div>
+
+  <p class="lead">Este é o dia 1 de abril. Ninguém sabe ainda quem vai pedir demissão. Você tem dois instrumentos: a <b>distribuição das features</b> e o <b>comportamento das predições</b>. Comece pelo segundo, que está na tela.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px;">
+    <table class="tbl">
+      <thead><tr><th>lote</th><th>versão</th><th>taxa positiva</th><th>alerta</th><th>atenção</th><th>ok</th></tr></thead>
+      <tbody>
+        <tr><td><code>lote_aula1_jan</code></td><td>v1</td><td>0,6021</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td><code>lote_aula2_fev</code></td><td>v1</td><td>0,3593</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td><code>lote_aula2_fev</code></td><td>v2</td><td>0,5193</td><td>303</td><td>424</td><td>673</td></tr>
+        <tr class="sep-a"><td><code>lote_aula3_mar</code></td><td>v2</td><td><b style="color:var(--orange)">0,3779</b></td><td><b style="color:var(--orange)">72</b></td><td>457</td><td>871</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Repare onde a queda mora</div>
+    <p>A taxa positiva caiu <b>27%</b> (0,5193 → 0,3779). Parece pouco. Mas a faixa de <b>alerta</b> caiu <b>76%</b> (303 → 72), e as pessoas migraram para as faixas de baixo: atenção subiu de 424 para 457 e ok inchou de 673 para 871.</p>
+    <p><b>O modelo não parou de responder — ele parou de ter certeza.</b> Quando um valor chega muito fora da faixa de treino, as árvores da floresta deixam de concordar entre si, e a probabilidade escorrega para o meio. É por isso que a faixa de alta confiança esvazia primeiro, e é por isso que <u>olhar só a taxa positiva esconde metade do incidente</u>.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Cuidado com a conclusão fácil</div>
+    <p>Esse número, sozinho, <b>não diz que o modelo está errado</b>. Se a rotatividade tivesse mesmo caído, marcar menos gente seria o comportamento certo — e reverter a v2 seria destruir uma melhoria real. Foi exatamente esse erro que vocês não cometeram em fevereiro, quando a taxa caiu de 0,61 para 0,41 e a causa era legítima.</p>
+    <p><b>Uma queda na taxa de predição positiva é um sintoma, não um diagnóstico.</b> Continue medindo.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Passo 2 · A referência">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-a">Bloco A · observar</span>
+  <div class="step-marker">
+    <div class="step-num ">2</div>
+    <div class="step-meta">
+      <span class="step-file">monitorar.py --referencia lote_aula2_fev</span>
+      <span class="step-obj">O script é o mesmo. O que muda é contra o que você compara.</span>
+    </div>
+  </div>
+
+  <p class="lead">Aqui tem uma decisão que a Aula 2 deixou anotada e hoje cobra: <b>contra qual passado você compara março?</b></p>
+
+  <div class="dois-mundos">
+    <div class="dm-col">
+      <h4>--referencia treino_v1</h4>
+      <p class="dm-q">O mundo de dezembro</p>
+      <p class="dm-r">Responde: <i>"março é diferente do que a v1 aprendeu?"</i></p>
+      <p class="dm-r" style="margin-top:8px">O problema: esse mundo <b>já foi substituído</b>. Dourados entrou em fevereiro e foi aceita. Comparar contra o treino faz o drift de fevereiro aparecer de novo, misturado com o que aconteceu hoje — e você não consegue separar os dois.</p>
+    </div>
+    <div class="dm-col destaque">
+      <h4>--referencia lote_aula2_fev</h4>
+      <p class="dm-q">O mundo do mês passado</p>
+      <p class="dm-r">Responde: <i>"março é diferente de fevereiro?"</i></p>
+      <p class="dm-r" style="margin-top:8px">É <b>essa</b> a pergunta de hoje. A população de fevereiro foi aceita, retreinada e promovida. Ela é a nova linha de base — e qualquer coisa que tenha mudado desde então é notícia de hoje, não herança.</p>
+    </div>
+  </div>
+
+  <p class="lead">O comando é este — e ele <b>não vai funcionar ainda</b>:</p>
+
+  <div class="code-wrap open">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">rodar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Ocultar</span></div>
+  </div>
+  <pre class="code">python monitorar.py --lote lote_aula3_mar --referencia lote_aula2_fev</pre>
+</div>
+
+  <div class="code-wrap open">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">o que acontece se você rodar agora</span>
+    <div class="code-right"><span class="lbadge">o que aparece</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Ocultar</span></div>
+  </div>
+  <pre class="code">Traceback (most recent call last):
+  File &quot;monitorar.py&quot;, line 55, in main
+    referencia = banco.carregar_conjunto(args.referencia)
+  File &quot;app/banco.py&quot;, line 46, in carregar_conjunto
+    cur.execute(f&quot;SELECT {&#x27;, &#x27;.join(colunas)} FROM {tabela}&quot;)
+psycopg2.errors.UndefinedTable: relation &quot;lote_aula2_fev&quot; does not exist</pre>
+</div>
+
+  <div class="callout co-err">
+    <div class="ct">O erro faz parte — leia a última linha antes de consertar</div>
+    <p>Até agora a referência foi <b>sempre</b> uma tabela, porque a pergunta foi sempre "mudou em relação ao treino?". O <code>monitorar.py</code> da Aula 2 faz <code>banco.carregar_conjunto(args.referencia)</code> e pronto. Passe o nome de um lote e o Postgres responde o que tem de responder: <code>lote_aula2_fev</code> não é tabela nenhuma.</p>
+  </div>
+
+  <p class="lead">Fevereiro não é tabela nenhuma. É um lote que passou pela API e virou linha em <code>predicoes</code>.</p>
+
+  <div class="callout co-info">
+    <div class="ct">É a única vez que você abre um arquivo do projeto hoje</div>
+    <p>Duas funções e uma linha trocada. Depois disto, <b>nenhum código muda pelo resto da aula</b> — e isso é de propósito: hoje o trabalho é entender o que aconteceu, não construir coisa nova.</p>
+  </div>
+
+  <div class="code-wrap open">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">monitorar.py · a única alteração de código da Aula 3</span>
+    <div class="code-right"><span class="lbadge">você escreve · a única alteração do dia</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Ocultar</span></div>
+  </div>
+  <pre class="code"><span class="c"># ═══════════════════════════════════════════════════════════════════════════</span>
+<span class="c">#  A ÚNICA ALTERAÇÃO DE CÓDIGO DA AULA 3 · monitorar.py</span>
+<span class="c">#</span>
+<span class="c">#  Duas funções novas e uma linha trocada. Faça agora e não mexa mais em</span>
+<span class="c">#  código pelo resto da aula.</span>
+<span class="c"># ═══════════════════════════════════════════════════════════════════════════</span>
+
+
+<span class="c"># ─────────────────────────────────────────────────────────────── 1 de 2 ──</span>
+<span class="c"># Cole depois de comparar_distribuicoes() e antes de main().</span>
+
+<span class="k">def</span> existe_tabela(nome):
+    <span class="s">&quot;&quot;&quot;Pergunta ao Postgres se o nome é uma tabela. to_regclass devolve NULL
+    quando não é, em vez de estourar exceção -- por isso ele, e não um SELECT
+    de teste dentro de try/except, que abortaria a transação.&quot;&quot;&quot;</span>
+    <span class="k">with</span> banco.conectar() <span class="k">as</span> con, con.cursor() <span class="k">as</span> cur:
+        cur.execute(<span class="s">&quot;SELECT to_regclass(%s) IS NOT NULL&quot;</span>, (nome,))
+        <span class="k">return</span> cur.fetchone()[<span class="o">0</span>]
+
+
+<span class="k">def</span> carregar_referencia(nome):
+    <span class="s">&quot;&quot;&quot;Aceita o nome de uma TABELA (treino_v1, validacao_atual) ou de um LOTE
+    já pontuado (lote_aula2_fev).
+
+    Até a Aula 2 a referência era sempre uma tabela, porque a pergunta era
+    sempre &quot;mudou em relação ao treino?&quot;. Hoje a pergunta é outra: &quot;março é
+    diferente de FEVEREIRO?&quot; -- e fevereiro não é tabela nenhuma, é um lote que
+    passou pela API e virou linha em `predicoes`.
+
+    Isso só funciona porque, desde a Aula 1, a aplicação guarda a ENTRADA exata
+    que recebeu no campo JSONB, não só a resposta que deu. Sem aquele campo,
+    comparar um mês contra o anterior seria impossível.
+    &quot;&quot;&quot;</span>
+    <span class="k">if</span> existe_tabela(nome):
+        <span class="k">return</span> banco.carregar_conjunto(nome)
+    referencia = banco.carregar_lote(nome)
+    <span class="k">if</span> referencia.empty:
+        <span class="k">raise</span> SystemExit(
+            f&quot;<span class="s">&#x27;{nome}&#x27;</span> não é tabela nem lote pontuado.\n&quot;
+            f&quot;Se <span class="k">for</span> um lote, confira o nome na tabela <span class="s">&#x27;Lotes já pontuados&#x27;</span> do front.&quot;)
+    <span class="k">return</span> referencia
+
+
+<span class="c"># ─────────────────────────────────────────────────────────────── 2 de 2 ──</span>
+<span class="c"># Dentro de main(), onde hoje está:</span>
+<span class="c">#</span>
+<span class="c">#     referencia = banco.carregar_conjunto(args.referencia)</span>
+<span class="c">#</span>
+<span class="c"># passa a ser:</span>
+
+    referencia = carregar_referencia(args.referencia)
+
+
+<span class="c"># ═══════════════════════════════════════════════════════════════════════════</span>
+<span class="c">#  Pronto. Nada mais muda no projeto hoje.</span>
+<span class="c">#</span>
+<span class="c">#  comparar_distribuicoes() continua igual: ela só usa config.FEATURES, e um</span>
+<span class="c">#  lote pontuado tem todas elas. O que o lote não tem é o rótulo -- que aqui</span>
+<span class="c">#  não é usado mesmo.</span>
+<span class="c"># ═══════════════════════════════════════════════════════════════════════════</span></pre>
+</div>
+
+  <p class="lead">Agora sim, o mesmo comando de antes:</p>
+
+  <div class="code-wrap open">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">rodar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Ocultar</span></div>
+  </div>
+  <pre class="code">python monitorar.py --lote lote_aula3_mar --referencia lote_aula2_fev</pre>
+</div>
+
+  <div class="callout co-info">
+    <div class="ct">O detalhe que torna isso possível</div>
+    <p>Um lote pontuado tem as 15 features guardadas no <b>JSONB</b> da tabela <code>predicoes</code>. Desde a Aula 1 a aplicação grava a <u>entrada exata que recebeu</u>, não só a resposta que deu — e é só por causa daquele campo que comparar um mês contra o anterior é possível hoje.</p>
+    <p style="margin-top:8px">O que o lote <b>não</b> tem é o rótulo. Aqui não faz falta: <code>comparar_distribuicoes()</code> só olha <code>config.FEATURES</code>.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="O relatório de março">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">a evidência</span>
+  <h2 class="sec-title">Duas colunas explodiram. As outras treze estão limpas de um jeito quase implausível.</h2>
+
+  <div class="code-wrap open">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">python monitorar.py --lote lote_aula3_mar --referencia lote_aula2_fev</span>
+    <div class="code-right"><span class="lbadge">o que aparece</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Ocultar</span></div>
+  </div>
+  <pre class="code">
+                  feature    ks  media_ref  media_atual  razao_media  perc_zeros_ref  perc_zeros_atual
+           he_valor_total 0.676   4025.853   402585.318        100.0            16.4              16.4
+      he_referencia_total 0.654    250.374    15022.421         60.0            16.4              16.4
+          mov_sal_eventos 0.322      0.937        0.937          1.0            36.9              36.9
+               hi_eventos 0.123      7.047        7.047          1.0            32.1              32.1
+       mov_sal_perc_medio 0.119      0.016        0.016          1.0            20.6              20.6
+        acidentes_eventos 0.117      0.180        0.180          1.0            85.8              85.8
+   hi_minutos_irregulares 0.086    837.012      837.012          1.0            20.9              20.9
+      mov_sal_valor_total 0.069     71.051       71.051          1.0            20.6              20.6
+               he_eventos 0.051     29.347       29.341          1.0            16.4              16.4
+acidentes_com_afastamento 0.011      0.014        0.014          1.0            98.8              98.8
+  acidentes_dias_perdidos 0.004      0.562        0.562          1.0            98.8              98.8
+            abs_qtd_total 0.001      2.667        2.667          1.0            99.8              99.8
+    horas_previstas_total 0.001    180.920      180.920          1.0            99.8              99.8
+              abs_eventos 0.000      0.002        0.002          1.0            99.8              99.8
+        hi_minutos_extras 0.000      0.000        0.000          NaN           100.0             100.0
+
+resumo
+  linhas                   1400
+  taxa_predicao_positiva   0.3779
+  probabilidade_media      0.4403
+  features_em_drift        3
+  maior_ks                 0.676
+  features_mortas          1</pre>
+</div>
+
+  <div class="callout co-warn">
+    <div class="ct">Antes de qualquer conclusão, olhe a linha da <code>he_eventos</code></div>
+    <p>Ela é a <b>contagem</b> de lançamentos de hora extra, e está com razão <code>1.000</code> — intacta. As duas colunas que explodiram são o <i>valor</i> e a <i>referência</i> desses mesmos lançamentos.</p>
+    <p><b>As pessoas fizeram exatamente a mesma quantidade de hora extra. Só o tamanho de cada uma mudou.</b> Segure essa frase: ela é metade do diagnóstico.</p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Fevereiro, para comparar</div>
+    <p><b>7</b> features em drift, espalhadas por três blocos, com razões 5,76 · 11,24 · 11,81 · 0,442 · 0,372 · 0,396 e o percentual de zeros da hora extra despencando de 64% para 16%. <b>Drift de população mexe em muita coisa ao mesmo tempo</b>, porque são outras pessoas inteiras. O que você tem hoje é cirúrgico.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">E a terceira linha? <code>mov_sal_eventos</code>, KS 0,322</div>
+    <p>O relatório diz <b>3 features em drift</b>, não 2 — e a terceira é a armadilha do dia. Olhe as outras colunas dela: razão de média <b>1,000</b>, zeros <b>36,9% → 36,9%</b>. Mesma escala, mesma proporção de gente sem movimentação.</p>
+    <p>O KS mede <u>forma</u> de distribuição, e a forma muda sozinha de um mês para o outro porque são outras 1.400 pessoas. <b>KS alto sem nenhuma das outras evidências é ruído de amostragem</b> — é o tipo de linha que faz um time desligar o monitoramento depois do quinto alarme falso.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="MLflow · linha do tempo">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-a">Bloco A · observar</span>
+  <div class="step-marker">
+    <div class="step-num ">3</div>
+    <div class="step-meta">
+      <span class="step-file">MLflow → experimento turnover_rh</span>
+      <span class="step-obj">O relatório diz o que mudou. O MLflow diz se já mudou antes.</span>
+    </div>
+  </div>
+
+  <p class="lead">Abra <b>127.0.0.1:5000</b>, entre no experimento <code>turnover_rh</code> e filtre na caixa de busca:</p>
+
+  <div class="code-wrap open">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">filtro do MLflow</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Ocultar</span></div>
+  </div>
+  <pre class="code">tags.tipo = &#x27;monitoramento&#x27;</pre>
+</div>
+
+  <p class="lead" style="margin-bottom:10px;">Vão aparecer três runs de monitoramento. <b>Não clique em Compare</b> — ele abre gráficos de coordenadas paralelas e dispersão, que servem para varredura de hiperparâmetro, não para ler três linhas.</p>
+
+  <p class="lead" style="margin-bottom:12px;">O que você quer é a própria <b>tabela de runs</b>. Acima dela, à direita, tem o botão <b>Columns</b> (ou <i>Customize columns</i>, conforme a versão): abra e marque estas, que estão agrupadas em <i>Tags</i> e <i>Metrics</i>.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th>grupo</th><th>colunas para marcar</th></tr></thead>
+      <tbody>
+        <tr><td>Tags</td><td><code>lote</code> · <code>referencia</code> · <code>versao_modelo</code></td></tr>
+        <tr><td>Metrics</td><td><code>maior_ks</code> · <code>features_em_drift</code> · <code>taxa_predicao_positiva</code> · <code>f1</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="lead" style="margin-bottom:12px;">Ordene por data e a linha do tempo aparece sozinha:</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px;">
+    <table class="tbl">
+      <thead><tr><th>lote</th><th>referência</th><th>versão</th><th>maior KS</th><th>em drift</th><th>taxa positiva</th><th>F1</th></tr></thead>
+      <tbody>
+        <tr><td>janeiro</td><td><code>treino_v1</code></td><td>v1</td><td>0,025</td><td>0</td><td>0,6021</td><td>—</td></tr>
+        <tr><td>fevereiro</td><td><code>treino_v1</code></td><td>v1</td><td>0,564</td><td>7</td><td>0,3593</td><td>0,5169</td></tr>
+        <tr class="sep-a"><td>março</td><td><code>lote_aula2_fev</code></td><td>v2</td><td>0,676</td><td>3</td><td><b style="color:var(--orange)">0,3779</b></td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Se você quiser mesmo usar o Compare</div>
+    <p>Ele serve, mas o que interessa está <b>no fim da página</b>: role até passar dos gráficos e você encontra os quadros <i>Parameters</i>, <i>Metrics</i> e <i>Tags</i>, com um run por coluna. É a mesma informação transposta. Para três runs, a tabela com as colunas escolhidas é mais rápida de ler — e é a que fica salva para a próxima vez que você abrir o experimento.</p>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">O que essa tabela mata · 1 — a hipótese da Marina</div>
+    <p>Ela suspeita da v2, e a suspeita é razoável: vocês publicaram a v2 entre um arquivo e outro. Mas a queda de fevereiro aconteceu com a <b>v1</b> em produção e a de março com a <b>v2</b>. Duas quedas, duas versões. Se o problema fosse "a versão nova", fevereiro não teria caído.</p>
+    <p>Quem permite dizer isso em uma frase é a tag <code>versao_modelo</code> — e ela está ali porque alguém a escreveu em janeiro, num dia em que não servia para nada.</p>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">O que essa tabela mata · 2 — o KS como critério</div>
+    <p>Fevereiro <b>0,564</b>, março <b>0,676</b>. Março é <u>maior</u>. Se o KS medisse gravidade de drift, março seria um caso <b>pior</b> que a entrada de uma unidade inteira na base — e março não é drift nenhum.</p>
+    <p><b>O KS não está errado. Ele só não responde à pergunta que você está fazendo.</b> Ele mede <i>quanto</i> a distribuição mudou, não <i>por quê</i>. Ordenar incidentes por KS é ordenar por tamanho do susto.</p>
+    <p>Se existisse um gatilho automático de retreino pendurado nessa métrica — e eles existem, em muita empresa —, ele teria disparado nos dois meses. E teria disparado <b>com mais confiança em março</b>, que é justamente o mês em que retreinar é o erro.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="MLflow · o artefato">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">no MLflow</span>
+  <h2 class="sec-title">Abra o artefato, não só a métrica</h2>
+
+  <p class="lead">No run de março: aba <b>Artifacts</b> → <code>drift/drift_lote_aula3_mar.csv</code>. É o relatório inteiro, congelado no dia em que aconteceu.</p>
+
+  <div class="callout co-info">
+    <div class="ct">Por que isso importa em junho</div>
+    <p>Daqui a três meses alguém vai perguntar "como vocês souberam que era unidade e não drift?". A resposta não pode ser memória de reunião. Vai ser <b>este arquivo</b>, com as razões 60,000 e 100,000 escritas nele, anexado ao run, com data.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="slide-h3">A divisão de trabalho dentro de um run</h3>
+    <p style="font-size:.86rem;color:var(--muted);line-height:1.75;">
+      <b style="color:var(--cyan)">metric</b> responde <i>quanto</i> — 0,676 de KS, 0,3779 de taxa positiva.<br>
+      <b style="color:var(--green)">artifact</b> guarda a <i>evidência</i> — o relatório com as 15 linhas.<br>
+      <b style="color:var(--orange)">tag</b> diz <i>de que run se trata</i> — lote, referência, versão do modelo. O que nenhuma das três guarda é <b>a sua conclusão</b>: essa vai no post-mortem.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Cuidado com a coluna <code>referencia</code></div>
+    <p>Os três runs <b>não respondem à mesma pergunta</b>: janeiro e fevereiro perguntam "mudou em relação ao treino?", março pergunta "mudou em relação a fevereiro?". Comparar KS entre referências diferentes é comparar réguas diferentes. A tag existe para você perceber isso <u>antes</u> de concluir — por isso ela vai em <code>log_params</code> e em <code>set_tags</code>.</p>
+  </div>
+
+  <div class="callout co-ok">
+    <div class="ct">A interpretação que sai daqui</div>
+    <p>A hipótese D caiu duas vezes, por dois caminhos independentes. Sobram A, B e C — e o <b>MLflow não resolve isso</b>, porque ele mede tamanho, não natureza. Quem resolve são três colunas do relatório que você já tem aberto.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="As três evidências">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-b">Bloco B · diagnosticar</span>
+  <div class="step-marker">
+    <div class="step-num b">4</div>
+    <div class="step-meta">
+      <span class="step-file">Ler o relatório coluna por coluna</span>
+      <span class="step-obj">Nenhuma fecha sozinha. Juntas, eliminam A e C.</span>
+    </div>
+  </div>
+
+  <div class="ev">
+    <div class="ev-item">
+      <div class="ev-n">1</div>
+      <div>
+        <h4>As razões são redondas</h4>
+        <p><code>60.0</code> e <code>100.0</code> — exatos, sem sobra na casa decimal.</p>
+        <p class="ev-conc">População não muda por número redondo — <b>régua muda</b>. Nenhuma unidade fabril começa a fazer exatamente 60× mais hora extra. Em fevereiro as razões foram 5,76 · 11,24 · 11,81: números tortos, de gente diferente. <b>Aponta B.</b></p>
+      </div>
+    </div>
+    <div class="ev-item">
+      <div class="ev-n">2</div>
+      <div>
+        <h4>As contagens de eventos estão intactas</h4>
+        <p><code>he_eventos</code> 29,347 → 29,341 · <code>mov_sal_eventos</code> 0,937 → 0,937</p>
+        <p class="ev-conc">Troca de unidade mexe em <i>valor</i>, não em <i>quantidade de eventos</i>. Em fevereiro a contagem multiplicou junto (5,1 → 29,3) — era gente diferente fazendo mais hora extra. Aqui é a mesma gente, o mesmo número de lançamentos. <b>Elimina A.</b></p>
+      </div>
+    </div>
+    <div class="ev-item">
+      <div class="ev-n">3</div>
+      <div>
+        <h4>O percentual de zeros é idêntico</h4>
+        <p><code>16,4% → 16,4%</code> nas três colunas de hora extra · e assim nas quinze features, sem exceção</p>
+        <p class="ev-conc">A evidência decisiva: <b>multiplicar por 60 não cria nem apaga um zero.</b> Quem não fazia hora extra continua com zero; quem fazia continua com valor. Se fossem outras pessoas, esse percentual teria andado — em fevereiro ele despencou de 64% para 16%. <b>Confirma B.</b></p>
+      </div>
+    </div>
+    <div class="ev-item">
+      <div class="ev-n">4</div>
+      <div>
+        <h4>E o que elimina C</h4>
+        <p>Duas colunas do <b>mesmo bloco</b>, por fatores limpos, sem nulo, sem negativo, sem linha faltando, com a contagem de linhas igual.</p>
+        <p class="ev-conc">Bug de pipeline costuma ser sujo: coluna inteira zerada, join duplicando linha, NaN aparecendo. Isto tem cara de <b>conversão</b>, não de código quebrado. <b>Elimina C.</b></p>
+      </div>
+    </div>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="O diagnóstico">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-b">Bloco B · diagnosticar</span>
+  <h2 class="sec-title">Escrito como tem que ser escrito</h2>
+
+  <div class="card" style="border-color:rgba(0,255,136,.3);">
+    <p style="font-size:.95rem;line-height:1.8;color:var(--text);">
+    "<b>Troca de unidade na origem, não drift.</b> As colunas <code>he_referencia_total</code> e <code>he_valor_total</code> chegaram multiplicadas por exatamente <b>60</b> e <b>100</b> — horas viraram minutos e reais viraram centavos.<br><br>
+    A contagem de eventos e o percentual de zeros estão inalterados nas 15 features — inclusive na <code>mov_sal_eventos</code>, a única outra com KS acima do corte —, o que descarta mudança de população. A versão em produção é a mesma de fevereiro, o que descarta publicação errada. Não há nulo, coluna faltando ou linha duplicada, o que afasta bug de pipeline.<br><br>
+    <b>O modelo não está errado. A entrada dele está.</b>"</p>
+  </div>
+
+  <div class="callout co-ok">
+    <div class="ct">Agora ligue para o fornecedor com essa frase</div>
+    <p>Não ligue perguntando "vocês mudaram alguma coisa?" — a resposta vai ser não, e vai ser sincera, porque quem atende não sabe. Ligue dizendo <b>"a versão 4.2 passou a exportar o campo de referência em minutos e o de valor em centavos; precisamos do reenvio de março na unidade anterior"</b>. Aí a conversa dura cinco minutos.</p>
+    <p style="margin-top:8px">E agora reler o comunicado do dia 28 dói: <i>"adequação aos padrões internos de precisão numérica"</i> era <b>exatamente isto</b>. Guardar valores inteiros em minutos e centavos evita arredondamento — do ponto de vista de quem escreveu, é uma melhoria. Ninguém mentiu. Ninguém avisou direito.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">A pergunta que fecha o bloco</div>
+    <p>Se a mudança do fornecedor era uma <i>melhoria</i>, e o comunicado foi <i>enviado</i>, e o arquivo chegou <i>sem nenhum defeito estrutural</i> — <b>de quem é a culpa de março?</b> Segure a resposta até o fim da aula. Ela não é do fornecedor.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="O estrago">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-b">Bloco B · diagnosticar</span>
+  <div class="step-marker">
+    <div class="step-num b">5</div>
+    <div class="step-meta">
+      <span class="step-file">monitorar.py --gabarito</span>
+      <span class="step-obj">O professor libera o rótulo de março agora. Na vida real seria junho.</span>
+    </div>
+  </div>
+
+  <p class="lead">Até aqui você diagnosticou <b>sem rótulo nenhum</b> — e é assim que teria
+  sido na prática. Agora o gabarito chega para medir o tamanho do buraco. Ponha
+  <code>gabarito_aula3_mar.csv</code> em <code>dados/</code> e rode <b>o mesmo comando do
+  Passo 2</b>, com <code>--gabarito</code> no fim:</p>
+
+  <div class="code-wrap open">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">rodar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Ocultar</span></div>
+  </div>
+  <pre class="code">python monitorar.py --lote lote_aula3_mar --referencia lote_aula2_fev --gabarito gabarito_aula3_mar.csv</pre>
+</div>
+
+  <div class="callout co-info">
+    <div class="ct">Sim, é o mesmo lote de novo — e vai ser uma terceira vez no fim</div>
+    <p>Cada rodada vira um run no MLflow, e isso é o comportamento certo: <b>um run registra o que você sabia naquele momento</b>. O primeiro tem só distribuição, porque em abril não havia rótulo. Este tem as métricas reais. O último, no Passo 7, vai ter a sua conclusão.</p>
+    <p>Quem abrir o experimento em julho vai ver a investigação inteira na ordem em que ela aconteceu — e não uma foto final que parece óbvia demais.</p>
+  </div>
+
+  <p class="lead">Compare com fevereiro, que é o único mês que você já mediu com a v2:</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px;">
+    <table class="tbl">
+      <thead><tr><th></th><th>fevereiro</th><th>março</th></tr></thead>
+      <tbody>
+        <tr><td>modelo em produção</td><td>v2</td><td>v2</td></tr>
+        <tr><td><b>taxa de saída real</b></td><td>0,4421</td><td><b>0,4421</b></td></tr>
+        <tr class="sep-a"><td>faixa de alerta</td><td>303</td><td><b style="color:var(--orange)">72</b></td></tr>
+        <tr><td>taxa de predição positiva</td><td>0,5193</td><td>0,3779</td></tr>
+        <tr><td><b>F1</b></td><td>0,6865</td><td><b style="color:var(--orange)">0,5070</b></td></tr>
+        <tr><td>recall</td><td>0,7464</td><td><b style="color:var(--orange)">0,4701</b></td></tr>
+        <tr><td>precision</td><td>0,6355</td><td>0,5501</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">Olhe a segunda linha antes de qualquer outra</div>
+    <p>A <b>taxa de saída real é a mesma</b>: 44,21% nos dois meses. A rotatividade não mudou,
+    o modelo não mudou — e o recall caiu de 0,75 para 0,47. De cada dez pessoas que iam pedir
+    demissão, o modelo apontou sete em fevereiro e <b>menos de cinco</b> em março.</p>
+    <p>A Marina passou o mês conversando com a lista errada, e as pessoas certas continuaram
+    trabalhando achando que ninguém tinha percebido nada. <b>Esse é o custo real, e ele não
+    aparece em nenhuma métrica do dashboard dela.</b></p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Um cuidado com esta comparação</div>
+    <p>Fevereiro e março têm <u>duas</u> diferenças: o defeito no arquivo e o fato de serem
+    outras 1.400 pessoas. Não dá para dizer que os 0,18 de F1 vieram só do bug.</p>
+    <p>A comparação com uma variável só — as mesmas pessoas, com e sem o defeito — vem no
+    fim da aula, quando o fornecedor reenviar o mês. <b>Segure a conclusão exata até lá.</b></p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="A decisão difícil">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-c">Bloco C · decidir</span>
+  <h2 class="sec-title">Por que retreinar é a resposta errada</h2>
+
+  <p class="lead">O reflexo, treinado no mês passado, é rodar <code>treinar.py --incorporar lote_aula3_mar</code>. Alguém vai propor em voz alta. Proponha você mesmo, se ninguém propuser — e então desmonte:</p>
+
+  <div class="card">
+    <h3 class="slide-h3">1 · Não conserta nada</h3>
+    <p style="font-size:.85rem;color:var(--muted)">Abril chega com o mesmo defeito. O fornecedor continua mandando minutos. Agora você tem duas versões do modelo e o mesmo problema.</p>
+  </div>
+  <div class="card">
+    <h3 class="slide-h3">2 · Grava o erro dentro do modelo</h3>
+    <p style="font-size:.85rem;color:var(--muted)">O conjunto de treino passa a ter <b>a mesma coluna em duas unidades diferentes</b> — fevereiro em horas, março em minutos — e nada, em lugar nenhum, diz isso. O lineage no MLflow vai apontar para um dataset que parece íntegro.</p>
+  </div>
+  <div class="card">
+    <h3 class="slide-h3">3 · Gasta o seu único movimento do trimestre</h3>
+    <p style="font-size:.85rem;color:var(--muted)">O rótulo leva três meses. Você retreina uma vez por trimestre, não uma vez por susto. Queimar esse movimento com dado errado é ficar sem ele quando o drift de verdade aparecer.</p>
+  </div>
+  <div class="card">
+    <h3 class="slide-h3">4 · O modelo não é o único cliente daquele dado</h3>
+    <p style="font-size:.85rem;color:var(--muted)">A folha, o BI e a auditoria leem o mesmo export. Se você "resolve" do seu lado, todo mundo continua quebrado — e ninguém mais vai perceber, porque o sintoma mais visível sumiu.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Sejam honestos sobre o número</div>
+    <p>Se vocês retreinarem com o arquivo quebrado, o F1 <u>não desaba</u>. Ele até melhora: <b>0,5619 contra 0,4933</b> da v2 na validação atual. As outras treze features seguram o resultado.</p>
+    <p><b>Esse é exatamente o ponto.</b> A resposta certa aqui não é a que tem o número melhor hoje; é a que ataca a causa. Um retreino que apaga o sintoma e deixa a origem quebrada é o tipo de decisão que parece ótima no dashboard e cobra o preço em julho.</p>
+  </div>
+
+  <div class="callout co-ok">
+    <div class="ct">A ação</div>
+    <p><b>Nenhuma versão nova.</b> Conserta-se a origem e reprocessa-se o mês. Nenhum treino, nenhuma promoção, nenhuma reversão — e é preciso ter estômago para defender isso numa reunião onde todo mundo espera que você "faça alguma coisa com o modelo".</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Por que passou?">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-c">Bloco C · decidir</span>
+  <h2 class="sec-title">A pergunta desconfortável</h2>
+
+  <p class="lead" style="font-size:1.05rem;color:var(--text);">Antes do código: <b>por que esse arquivo foi pontuado?</b></p>
+
+  <p class="lead">A produção já tinha uma checagem de contrato desde a Aula 1 — aquela que recusa o CSV se faltar coluna. Março passou por ela sem tropeçar.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px;">
+    <table class="tbl">
+      <thead><tr><th>o que a Aula 1 checava</th><th>março</th></tr></thead>
+      <tbody>
+        <tr><td>as 15 colunas estão presentes?</td><td style="color:var(--green)">sim</td></tr>
+        <tr><td>são numéricas?</td><td style="color:var(--green)">sim</td></tr>
+        <tr><td>tem nulo?</td><td style="color:var(--green)">nenhum</td></tr>
+        <tr><td>a contagem de linhas bate?</td><td style="color:var(--green)">1.400, como todo mês</td></tr>
+        <tr class="sep-a"><td><b>os valores fazem sentido?</b></td><td><b style="color:var(--orange)">ninguém perguntou</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">Schema não vê unidade</div>
+    <p>Coluna certa com valor impossível passa por qualquer validação de estrutura. O que faltava não era saber <i>quais</i> colunas vêm, e sim <b>que valores são plausíveis nelas</b>.</p>
+    <p>Um campo com 14.603 onde a população inteira vive na casa dos 240 é estruturalmente perfeito e semanticamente absurdo. Nenhum <code>dtype</code> captura isso.</p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">E a resposta da pergunta do Passo 4</div>
+    <p>De quem é a culpa de março? <b>Não é do fornecedor.</b> Ele publicou uma melhoria e mandou um comunicado. A culpa é de um sistema que aceitou qualquer número que viesse com o nome de coluna certo — e esse sistema é o de vocês.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Teoria · O portão">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">teoria — ninguém implementa hoje</span>
+  <h2 class="sec-title">O que teria segurado março na porta</h2>
+
+  <p class="lead">Vocês não vão escrever isto hoje. Mas precisam saber que existe, porque é
+  a resposta natural para a pergunta do slide anterior — e porque, quando alguém propuser
+  em uma reunião, vocês vão precisar ter opinião.</p>
+
+  <p class="lead">A ideia tem duas peças. Um <b>contrato de dados</b>: o registro de como a
+  população que o modelo atende hoje se parece — faixa de valores, média e percentual de
+  zeros, feature por feature. E um <b>portão</b> no caminho do arquivo: antes de pontuar,
+  compara o lote com o contrato. Se não bate, o arquivo não vira predição — vai para uma
+  <b>quarentena</b> e espera uma pessoa.</p>
+
+  <div class="wid">
+    <div class="wid-cab">Simulador · três meses, o mesmo portão</div>
+    <div class="portao-sim">
+      <div class="ps-topo">
+        <div class="ps-arquivos">
+          <button class="ps-arq" data-lote="jan"><b>janeiro</b><span>mês comum</span></button>
+          <button class="ps-arq" data-lote="fev"><b>fevereiro</b><span>população nova</span></button>
+          <button class="ps-arq ativo" data-lote="mar"><b>março</b><span>unidade trocada</span></button>
+        </div>
+        <label class="ps-switch"><input type="checkbox" id="ps-ligado" checked><span>portão ligado</span></label>
+      </div>
+
+      <div class="ps-pista">
+        <div class="ps-marco ps-ini"><b>origem</b><span>export do ponto</span></div>
+        <div class="ps-portao" id="ps-portao"><b>PORTÃO</b><span id="ps-portao-sub">contrato</span></div>
+        <div class="ps-marco ps-fim"><b>produção</b><span>vira predição</span></div>
+        <div class="ps-pacote" id="ps-pacote">CSV<span>1.400</span></div>
+      </div>
+
+      <div class="ps-quar" id="ps-quar">
+        <b>quarentena</b><span id="ps-quar-n">nenhum lote retido</span>
+      </div>
+
+      <div class="ps-saida" id="ps-saida">
+        <p class="ps-vazio">Escolha um mês e veja o que acontece com o arquivo.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Desligue o portão e mande março de novo</div>
+    <p>É o cenário que vocês viveram de verdade este mês. O arquivo entra, vira 1.400
+    decisões sobre pessoas, e o defeito só aparece quando alguém estranha o tamanho da
+    lista. <b>A diferença entre um incidente e um incidente que já chegou na mesa da
+    Marina é uma linha de código no caminho do arquivo.</b></p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Teoria · Ele não decide">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">teoria</span>
+  <h2 class="sec-title">A objeção certa: "ele vai barrar coisa boa também"</h2>
+
+  <p class="lead">Vai. Repare no simulador: <b>fevereiro também é retido</b> — e fevereiro
+  era legítimo, virou retreino e promoção da v2. Isso parece um defeito e é a característica
+  mais importante da ideia inteira.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px;">
+    <table class="tbl">
+      <thead><tr><th></th><th>fevereiro</th><th>março</th></tr></thead>
+      <tbody>
+        <tr><td>o portão</td><td>retém</td><td>retém</td></tr>
+        <tr><td>razão de média</td><td>deslocada (5,76 · 11,24 · 11,81)</td><td>deslocada (60,0 · 100,0)</td></tr>
+        <tr><td>número redondo?</td><td>não</td><td><b style="color:var(--orange)">sim</b></td></tr>
+        <tr class="sep-a"><td><b>percentual de zeros</b></td><td><b>deslocado</b> (64% → 16%)</td><td><b style="color:var(--green)">idêntico</b></td></tr>
+        <tr><td>contagem de eventos</td><td>multiplicou junto</td><td>intacta</td></tr>
+        <tr class="sep-c"><td><b>o humano decide</b></td><td>população nova → <b>retreinar</b></td><td>bug de unidade → <b>consertar a origem</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-ok">
+    <div class="ct">O portão não diagnostica — ele segura</div>
+    <p>Ele não sabe, e não precisa saber, se o arquivo está estranho porque o mundo mudou
+    ou porque o encanamento quebrou. Ele sabe uma coisa só: <u>isto não se parece com o que
+    a produção espera</u>. Quem separa drift de bug é você, com o relatório na mão — e são
+    diagnósticos com ações opostas.</p>
+    <p style="margin-top:8px">Um portão que só barrasse bug não pode existir: <b>no momento
+    em que o arquivo chega, ninguém sabe ainda qual dos dois é.</b></p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">E a alternativa mais honesta: alertar em vez de bloquear</div>
+    <p>Bloquear tem custo. Um portão mal calibrado que trava o fechamento do mês é pior que
+    uma lista duvidosa — em muita empresa, parar o processo custa mais que errar nele.</p>
+    <p style="margin-top:8px">A versão intermediária: o lote é pontuado, mas sai <b>marcado
+    como suspeito</b>, e a lista chega ao RH com o aviso. <b>Qual das duas vocês
+    escolheriam aqui, sabendo que o rótulo leva três meses para chegar?</b> Essa pergunta
+    vale mais que o código.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Opcional · implementar">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">opcional — para quem quiser fazer em casa</span>
+  <h2 class="sec-title">O caminho, em cinco peças</h2>
+
+  <p class="lead">Nada disto é cobrado. Fica aqui para quem quiser levar o projeto adiante
+  — e porque ver o tamanho real do trabalho ajuda a julgar se ele vale a pena.</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th>#</th><th>onde</th><th>o quê</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>config.py</code></td><td>faixa aceitável de razão de média (ex.: 3× para cima ou para baixo), tolerância de linhas fora da faixa (1%), deslocamento aceitável de zeros (20 p.p.) e a densidade mínima para uma coluna ter média lida</td></tr>
+        <tr><td>2</td><td><code>validar.py</code> <i>(novo)</i></td><td><code>gerar_contrato()</code> grava um JSON com mínimo, máximo plausível, média e % de zeros por feature, a partir do último lote aceito. <code>checar(df)</code> compara um lote com esse JSON e devolve os problemas em texto</td></tr>
+        <tr><td>3</td><td><code>sql/</code></td><td>tabela <code>quarentena</code>: lote, linhas, versão do modelo, e os problemas em JSONB</td></tr>
+        <tr><td>4</td><td><code>app/main.py</code></td><td>dentro do <code>POST /lote</code>, entre a checagem de colunas e o <code>pontuar()</code>: se <code>checar()</code> reprovar, grava na quarentena e devolve 422 com <code>linhas_pontuadas: 0</code></td></tr>
+        <tr><td>5</td><td>front</td><td>painel dos lotes retidos e a resposta do upload mostrando o motivo em vez de JSON cru — quem sobe o arquivo é o RH, não vocês</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Os três detalhes que decidem se isso presta</div>
+    <p><b>A referência é o último lote aceito, não o treino.</b> Contrato gerado contra
+    <code>treino_v1</code> reprova fevereiro para sempre, porque aquele mundo foi
+    substituído.</p>
+    <p><b>Coluna quase toda zerada não tem média lida.</b> Cinco das quinze features têm
+    99%+ de zeros; a média delas oscila 3× de um mês para o outro sem nada ter acontecido.
+    Alarme falso é como monitoramento morre na prática.</p>
+    <p><b>Razão redonda só vira suspeita de unidade se os zeros estiverem parados.</b>
+    Fevereiro tem razão 11,81, que passa por "12" com 1,6% de erro — e fevereiro era drift
+    de verdade. Sem essa segunda condição, o validador teria acusado o fornecedor no mês
+    errado, e a confiança na ferramenta acabaria antes de ela ser útil.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="E se fosse na nossa API?">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-c">Bloco C · decidir</span>
+  <h2 class="sec-title">"Espera. Dá para corrigir aqui mesmo, não dá?"</h2>
+
+  <p class="lead">Antes de abrir o arquivo corrigido, pare cinco minutos nesta pergunta — ela vai aparecer sozinha. Alguém já percebeu que bastariam <b>cinco linhas</b> entre o <code>read_csv</code> e o <code>pontuar</code> para dividir uma coluna por 60 e a outra por 100, e o mês estaria resolvido sem depender de ninguém.</p>
+
+  <p class="lead" style="color:var(--text);"><b>Dá, sim. E é justamente por isso que vale discutir.</b> A pergunta não é se é possível — é quem é o dono desse conserto, e o que ele quebra depois.</p>
+
+  <h3 class="slide-h3" style="margin-top:22px">As três versões dessa ideia</h3>
+
+  <div class="card" style="border-color:rgba(255,107,53,.3)">
+    <h3 class="slide-h3" style="color:var(--orange)">1 · A versão ruim — <code>df["he_valor_total"] /= 100</code> solto no main.py</h3>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.7">Funciona hoje e vira bomba-relógio. No dia em que o fornecedor consertar o export — e ele vai consertar —, a sua divisão continua lá. Abril chega com os valores <b>100× menores</b> que o real, e agora o arquivo de entrada está certo e quem está errado é você. O incidente inverte de sinal e fica muito mais difícil de achar.</p>
+  </div>
+
+  <div class="card" style="border-color:rgba(255,107,53,.45)">
+    <h3 class="slide-h3" style="color:var(--orange)">2 · A versão perigosa — detectar o fator e corrigir sozinho</h3>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.7">"Se a razão bate 60 exato, divide por 60." Parece elegante. Agora aplique isso em <b>fevereiro</b>: a razão foi <b style="color:var(--text)">11,81</b>, que passa por 12 dentro da tolerância de 5%. Um corretor automático teria "consertado" a entrada de Dourados — <b style="color:var(--text)">apagado uma mudança real de população</b> e deixado o modelo cego para ela.</p>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.7;margin-top:8px">O portão de vocês só não cai nessa porque exige que os zeros estejam parados. Essa condição ajuda muito — mas não é infalível, e apostar a correção automática nela é apostar alto.</p>
+  </div>
+
+  <div class="card" style="border-color:rgba(0,255,136,.3)">
+    <h3 class="slide-h3" style="color:var(--green)">3 · A versão defensável — adaptador por versão declarada</h3>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.7">A origem <b>se identifica</b>: o arquivo (ou o contrato) diz <code>origem: ponto v4.2</code>. A aplicação tem um mapa <code>{"4.2": {"he_referencia_total": 1/60, "he_valor_total": 1/100}}</code> e converte porque a fonte se declarou, <u>não</u> porque a média pareceu estranha. Quando o fornecedor volta para a 4.1, o adaptador simplesmente não dispara.</p>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.7;margin-top:8px">Isso é engenharia de dados de verdade: <b style="color:var(--text)">contrato com unidade declarada e adaptador por versão de origem</b>. A diferença entre as versões 2 e 3 não é a linha de código — é <i>o que dispara</i> a conversão.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="De quem é o conserto">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-c">Bloco C · decidir</span>
+  <h2 class="sec-title">Vocês não são os únicos que leem aquele arquivo</h2>
+
+  <p class="lead">Este é o argumento que decide, e ele não é técnico. O export do sistema de ponto alimenta muito mais gente do que o modelo de vocês:</p>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px;">
+    <table class="tbl">
+      <thead><tr><th>quem lê o mesmo export</th><th>o que março quebrou lá</th><th>quem percebeu</th></tr></thead>
+      <tbody>
+        <tr><td><b>o modelo de turnover</b></td><td>lista de risco pela metade</td><td style="color:var(--green)">vocês, em um dia</td></tr>
+        <tr><td>a folha de pagamento</td><td>valores de HE 100× maiores</td><td style="color:var(--orange)">talvez no fechamento</td></tr>
+        <tr><td>o BI de custo operacional</td><td>custo de hora extra explodindo</td><td style="color:var(--orange)">no comitê do mês</td></tr>
+        <tr class="sep-a"><td>a auditoria / eSocial</td><td>base divergente do apontado</td><td style="color:var(--orange)">meses depois, se</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">Corrigir do lado de cá transfere o problema — não resolve</div>
+    <p>Se vocês dividem por 60 no <code>main.py</code>, o sintoma <b>mais visível</b> some. A lista de risco volta ao normal, a Marina para de reclamar, e a folha, o BI e a auditoria continuam quebrados — agora <u>sem ninguém para perceber</u>, porque o único time que tinha instrumentação para enxergar o defeito acabou de silenciar o próprio alarme.</p>
+    <p style="margin-top:8px"><b>Vocês eram o detector de fumaça do prédio inteiro.</b> E ia desligá-lo porque o barulho incomodava.</p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">Divisão de papéis, sem covardia</div>
+    <p><b>Do fornecedor:</b> versionar o export e declarar unidade. <b>Da engenharia de dados:</b> o adaptador por versão, se ele for necessário, e o contrato entre origem e consumidores. <b>De vocês:</b> detectar, diagnosticar, reter o arquivo e <u>escalar com evidência</u> — que é exatamente o que fizeram hoje.</p>
+    <p style="margin-top:8px">"Não é meu papel" não é resposta aceitável se você não levou o problema para quem tem o papel. <b>Vocês não consertam a origem; vocês são quem prova que ela quebrou.</b></p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">E se o fornecedor demorar duas semanas?</div>
+    <p>Aí sim se aplica a conversão — como <b>mitigação</b>, não como solução, e com as três coisas que separam uma da outra: <b>dono</b> (quem remove), <b>registro</b> (o lote fica marcado como reprocessado por adaptador, para o lineage não sumir) e <b>prazo</b> (data de expiração, amarrada ao chamado).</p>
+    <p style="margin-top:8px"><b>Mitigação sem data de validade vira arquitetura por acidente.</b> Daqui a dois anos alguém vai achar um <code>/60</code> no código e não vai ter ninguém vivo na empresa para explicar por que ele está ali.</p>
+  </div>
+
+  <div class="callout co-ok">
+    <div class="ct">A frase para levar</div>
+    <p style="font-size:.95rem;color:var(--text)"><b>Não é porque dá que deve ser feito.</b> Metade das decisões de MLOps é escolher o que <u>não</u> automatizar — e a outra metade é registrar por que você escolheu assim.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Passo 6 · o fechamento">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="bloco-mark bl-c">Bloco C · decidir</span>
+  <div class="step-marker">
+    <div class="step-num c">6</div>
+    <div class="step-meta">
+      <span class="step-file">o reenvio do fornecedor</span>
+      <span class="step-obj">Provar que era o arquivo — e deixar isso escrito.</span>
+    </div>
+  </div>
+
+  <p class="lead">O fornecedor corrigiu o export e reenviou o mês. Repare no que <b>não</b>
+  foi feito: ninguém dividiu por 60 dentro do pipeline. O arquivo foi consertado na origem,
+  porque a folha, o BI e a auditoria leem o mesmo export.</p>
+
+  <p class="lead">Suba o <code>lote_aula3_mar_corrigido.csv</code> pelo front e meça.
+  <b>Agora a comparação tem uma variável só:</b> as mesmas 1.400 pessoas, o mesmo modelo v2,
+  o mesmo dia — e o arquivo certo.</p>
+
+  <div class="code-wrap open">
+  <div class="code-header" onclick="toggleCode(this)">
+    <span class="fname">terminal</span>
+    <div class="code-right"><span class="lbadge">rodar</span><button class="copy-btn" onclick="copyCode(event, this)">Copiar</button><span class="code-toggle-btn">Ocultar</span></div>
+  </div>
+  <pre class="code">python monitorar.py --lote lote_aula3_mar_corrigido --referencia lote_aula2_fev --gabarito gabarito_aula3_mar.csv</pre>
+</div>
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <table class="tbl">
+      <thead><tr><th></th><th>com o bug</th><th>corrigido</th></tr></thead>
+      <tbody>
+        <tr><td>faixa de alerta</td><td>72</td><td><b style="color:var(--green)">165</b></td></tr>
+        <tr><td>taxa de predição positiva</td><td>0,3779</td><td>0,5271</td></tr>
+        <tr class="sep-c"><td><b>F1</b></td><td>0,5070</td><td><b style="color:var(--green)">0,5866</b></td></tr>
+        <tr><td>recall</td><td>0,4701</td><td><b style="color:var(--green)">0,6430</b></td></tr>
+        <tr class="sep-a"><td>versões criadas</td><td>0</td><td><b>0</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout co-err">
+    <div class="ct">Agora dá para cravar o tamanho do estrago</div>
+    <p>No Passo 5 vocês seguraram a conclusão porque fevereiro e março tinham duas
+    diferenças. Aqui só o arquivo muda: <b>o bug custou 93 nomes na faixa de alerta e 0,17
+    de recall</b>. Nada disso veio da população.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">"Mas por que não voltou aos 303 de fevereiro?"</div>
+    <p>Março é outro mês, com outras 1.400 pessoas. A população tem o mesmo perfil — o
+    relatório mostra isso —, mas não é a mesma gente. Esperar o mesmo número seria confundir
+    <i>mesma população</i> com <i>mesmas pessoas</i>.</p>
+  </div>
+
+  <div class="callout co-ok">
+    <div class="ct">Abra o MLflow e confirme o que NÃO aconteceu</div>
+    <p>Aba <b>Models → turnover_rh</b>: duas versões, <code>@champion</code> na v2. Nenhuma
+    versão foi criada, promovida ou revertida hoje.</p>
+    <p><b>Uma aula de MLOps que termina sem promover nada</b> — e essa é a frase mais difícil
+    de defender numa reunião onde todo mundo espera que você faça alguma coisa com o modelo.</p>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">O que precisa ficar escrito, e não está</div>
+    <p>Daqui a seis meses alguém vai olhar a linha do tempo, ver <b>"F1 0,5070 em março"</b> e
+    concluir que a v2 era ruim. Os runs guardam as métricas e o relatório de drift, mas não
+    guardam <u>a sua conclusão</u> — e ela é a única coisa ali que uma máquina não consegue
+    preencher sozinha.</p>
+    <p>Por isso o post-mortem da entrega não é burocracia. <b>"Não fizemos nada, e aqui está
+    o porquê" é a decisão mais difícil de defender depois, se não estiver escrita em lugar
+    nenhum.</b></p>
+  </div>
+
+  <div class="callout co-info">
+    <div class="ct">O que vai para a Marina</div>
+    <p>"O modelo está igual ao de fevereiro. <b>O que estava errado era o arquivo.</b> A lista
+    de alerta de março foi refeita e tem 165 nomes."</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="Conferência final">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">antes de fechar</span>
+  <h2 class="sec-title">O que tem que estar de pé</h2>
+
+  <div class="final-check" id="final-checklist">
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">front abrindo com <code>modelo v2 · @champion</code> no começo e no fim da aula</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">run de monitoramento de março contra <code>lote_aula2_fev</code>: 3 em drift, maior KS 0,676</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">os quatro runs comparados no MLflow, com a coluna <code>versao_modelo</code> visível</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">diagnóstico escrito, com as evidências que eliminam A, C e D</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">você sabe dizer por que <code>he_eventos</code> com razão 1,000 elimina drift — e por que o KS 0,322 da <code>mov_sal_eventos</code> não significa nada</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">você sabe explicar, sem escrever código, o que um contrato de dados guarda e o que o portão faria com março</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">você tem opinião formada sobre <b>bloquear ou apenas alertar</b>, e sabe defender a sua</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">arquivo corrigido aprovado e pontuado: 165 alertas · taxa 0,5271 · F1 0,5866</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">registry com <b>duas</b> versões — nenhuma criada hoje</div></div>
+    <div class="fc-item"><div class="fc-check">✓</div><div class="fc-text">você sabe explicar por que um portão barraria fevereiro também, e por que isso está certo</div></div>
+  </div>
+
+  <div class="callout co-warn">
+    <div class="ct">Se algum item falhou</div>
+    <p><b>Front sem o painel de quarentena:</b> você editou o <code>index.html</code> mas não reiniciou o uvicorn, ou o navegador está com cache — force o reload.</p>
+    <p><b>Relatório de março mostrando 7 ou mais features em drift:</b> faltou <code>--referencia lote_aula2_fev</code>; você comparou contra o treino e trouxe o drift de fevereiro junto.</p>
+  </div>
+
+
+</div>
+</div>
+<div class="slide" data-title="O que entregar">
+<div class="slide-inner slide-scroll">
+
+
+  <span class="otag">avaliação</span>
+  <h2 class="sec-title">Post-mortem, mesmo formato das outras aulas</h2>
+
+  <div class="card">
+    <p style="font-size:.88rem;line-height:1.9;color:var(--muted)">
+    <b style="color:var(--cyan)">1 · Situação</b> — o que chegou e o que você observou antes de ter rótulo.<br>
+    <b style="color:var(--cyan)">2 · Evidência</b> — os números, com nome e valor: taxa positiva, razões de média, contagens de eventos, percentual de zeros, versão em produção.<br>
+    <b style="color:var(--cyan)">3 · Diagnóstico</b> — qual das quatro hipóteses, e o que eliminou cada uma das outras três.<br>
+    <b style="color:var(--cyan)">4 · Ação</b> — o que você fez e, principalmente, <b style="color:var(--text)">o que decidiu não fazer</b>, com o argumento.<br>
+    <b style="color:var(--cyan)">5 · Registro</b> — links dos runs e o estado do registry, provando que nenhuma versão foi criada.</p>
+  </div>
+
+  <h3 class="slide-h3" style="margin-top:20px">E responda, com uma frase cada</h3>
+  <div class="qa">
+    <p>· Por que a razão <b>1,000</b> da <code>he_eventos</code> vale mais que o KS <b>0,676</b> da <code>he_valor_total</code> neste diagnóstico?</p>
+    <p>· O que o percentual de zeros diz que a razão de média não diz?</p>
+    <p>· Se você tivesse retreinado com o arquivo de março, o que quebraria em abril?</p>
+    <p>· Um portão de entrada teria segurado março. Ele teria segurado fevereiro também — por que isso <u>não</u> é um defeito?</p>
+    <p>· Se o fornecedor demorasse duas semanas, o que precisaria estar amarrado antes de vocês aplicarem a conversão na própria API?</p>
+  </div>
+
+  <div class="callout co-ok">
+    <div class="ct">Peso: 60% diagnóstico e evidência · 25% registro · 15% resultado</div>
+    <p>Nesta aula, o grupo que <b>não criou nenhuma versão</b> e soube explicar por quê vale mais que o grupo que retreinou e trouxe um F1 melhor. Isso foi dito na primeira aula e hoje vale literalmente.</p>
+  </div>
+
+  <div class="bridge">
+    <h3 class="slide-h3" style="margin-bottom:10px;">🔮 Próxima aula — quando a coluna simplesmente para de existir</h3>
+    <p style="color:var(--muted);font-size:.88rem;line-height:1.7;margin-bottom:14px;">Abril chega e o RH muda uma política interna. O relatório vem com KS alto de novo — e desta vez a pista está numa coluna que vocês veem desde a Aula 1 e nunca auditaram: <code>perc_zeros_atual = 100,0</code>. Uma feature 100% zerada não está em drift. <strong style="color:var(--text)">Ela está morta.</strong> E a pergunta vai ser outra: o que se faz com uma coluna que o mundo deixou de produzir?</p>
+    <div class="next-pills">
+      <div class="next-pill">feature morta</div>
+      <div class="next-pill">mudança de política</div>
+      <div class="next-pill">retreinar sem ela?</div>
+      <div class="next-pill">o que fazer com a coluna</div>
+    </div>
+  </div>
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+// ══════════════════════════ BG CANVAS ══════════════════════════
+const bgCanvas = document.getElementById('bg');
+const bgCtx = bgCanvas.getContext('2d');
+let BW, BH, nodes = [];
+function resizeBg() { BW = bgCanvas.width = window.innerWidth; BH = bgCanvas.height = window.innerHeight; }
+resizeBg(); window.addEventListener('resize', () => { resizeBg(); initNodes(); });
+function initNodes() {
+  nodes = [];
+  const n = Math.floor((BW * BH) / 18000);
+  for (let i = 0; i < n; i++) nodes.push({ x:Math.random()*BW, y:Math.random()*BH, vx:(Math.random()-.5)*.4, vy:(Math.random()-.5)*.4, r:Math.random()*2+1 });
+}
+initNodes();
+function drawBg() {
+  bgCtx.clearRect(0, 0, BW, BH);
+  nodes.forEach(n => { n.x += n.vx; n.y += n.vy; if(n.x<0||n.x>BW)n.vx*=-1; if(n.y<0||n.y>BH)n.vy*=-1; });
+  for (let i = 0; i < nodes.length; i++) for (let j = i+1; j < nodes.length; j++) {
+    const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y, d=Math.sqrt(dx*dx+dy*dy);
+    if (d < 120) { bgCtx.beginPath(); bgCtx.moveTo(nodes[i].x,nodes[i].y); bgCtx.lineTo(nodes[j].x,nodes[j].y); bgCtx.strokeStyle=`rgba(124,58,237,${.15*(1-d/120)})`; bgCtx.lineWidth=.5; bgCtx.stroke(); }
+  }
+  nodes.forEach(n => { bgCtx.beginPath(); bgCtx.arc(n.x,n.y,n.r,0,Math.PI*2); bgCtx.fillStyle='rgba(0,229,255,.5)'; bgCtx.fill(); });
+  requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// ══════════════════════════ SLIDE ENGINE ══════════════════════════
+const slideEls = Array.from(document.querySelectorAll('.slide'));
+const TOTAL = slideEls.length;
+let current = 0, maxReached = 0;
+const progressBar = document.getElementById('progress-bar');
+const counter     = document.getElementById('slide-counter');
+const titleBar    = document.getElementById('slide-title-bar');
+const navPrev     = document.getElementById('nav-prev');
+const navNext     = document.getElementById('nav-next');
+const dotsEl      = document.getElementById('dots');
+
+slideEls.forEach((_, i) => {
+  const d = document.createElement('div'); d.className = 'dot'; d.onclick = () => goTo(i);
+  dotsEl.appendChild(d);
+});
+
+function goTo(n) {
+  if (n < 0 || n >= TOTAL) return;
+  slideEls.forEach((s, i) => { s.classList.remove('active', 'prev'); if (i < n) s.classList.add('prev'); });
+  slideEls[n].classList.add('active');
+  slideEls[n].scrollTop = 0;
+  current = n;
+  if (n > maxReached) maxReached = n;
+  updateUI();
+  onSlideEnter(current);
+}
+
+function updateUI() {
+  progressBar.style.width = ((current + 1) / TOTAL * 100) + '%';
+  counter.textContent = `${current + 1} / ${TOTAL}`;
+  titleBar.textContent = slideEls[current].dataset.title || '';
+  navPrev.classList.toggle('disabled', current === 0);
+  navNext.classList.toggle('disabled', current === TOTAL - 1);
+  document.querySelectorAll('.dot').forEach((d,i) => {
+    d.classList.toggle('active', i === current);
+    d.classList.toggle('done', i < current);
+  });
+}
+
+navPrev.onclick = () => goTo(current - 1);
+navNext.onclick = () => goTo(current + 1);
+document.addEventListener('keydown', e => {
+  if (e.target.closest('.code')) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(current - 1);
+});
+requestAnimationFrame(() => goTo(0));
+
+function onSlideEnter(n) {
+  if (slideEls[n].dataset.title === 'Conferência final') {
+    const el = document.getElementById('final-checklist');
+    el.classList.remove('play'); void el.offsetWidth; el.classList.add('play');
+  }
+}
+
+// ══════════════════════════ CÓDIGO ESCONDIDO ══════════════════════════
+function toggleCode(header) {
+  const wrap = header.parentElement;
+  const open = wrap.classList.toggle('open');
+  const btn = header.querySelector('.code-toggle-btn');
+  if (btn) btn.textContent = open ? 'Ocultar' : 'Clique para ver';
+}
+
+// ══════════════════════════ COPIAR CÓDIGO ══════════════════════════
+function copyCode(evento, botao) {
+  evento.stopPropagation();
+  const wrap = botao.closest('.code-wrap');
+  const texto = wrap.querySelector('.code').textContent;
+  const feedback = (ok) => {
+    botao.textContent = ok ? '✓ Copiado' : 'Falhou';
+    botao.classList.toggle('done', ok);
+    setTimeout(() => { botao.textContent = 'Copiar'; botao.classList.remove('done'); }, 1800);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(texto).then(() => feedback(true), () => feedback(false));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = texto; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    feedback(ok);
+  }
+}
+
+/* ══════════════════════ utilidades ══════════════════════ */
+function lcg(seed) {            // gerador deterministico: todo aluno ve o mesmo
+  let s = seed;
+  return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+}
+function normal(rnd, media, dp) {
+  const u = Math.max(rnd(), 1e-9), v = rnd();
+  return media + dp * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+
+/* ═══════════════════ Simulador do portão de entrada (slide de teoria) ═══ */
+(function(){
+  const raiz = document.querySelector('.portao-sim');
+  if(!raiz) return;
+
+  const DADOS = {
+    jan: {
+      titulo: 'lote_aula1_jan',
+      razoes: ['todas ≈ 1,0 contra o treino', 'bom'],
+      zeros:  ['sem deslocamento', 'bom'],
+      ks:     ['maior 0,025 — nenhuma acima do corte', 'bom'],
+      reprovado: false,
+      passou: 'O contrato reconhece o arquivo. 1.400 linhas pontuadas, lista coerente com o mês anterior.',
+      humano: null,
+      semPortao: 'Mesmo resultado. Mês comum não precisa de portão — e é por isso que ninguém constrói um antes do primeiro incidente.'
+    },
+    fev: {
+      titulo: 'lote_aula2_fev',
+      razoes: ['5,76 · 11,24 · 11,45 — tortas', 'ruim'],
+      zeros:  ['64% → 16% na hora extra: deslocados', 'ruim'],
+      ks:     ['maior 0,564 — 7 features acima do corte', 'ruim'],
+      reprovado: true,
+      retido: 'Retido. Nenhuma linha virou predição. O arquivo espera uma pessoa.',
+      humano: 'Zeros deslocados e contagem de eventos multiplicando junto: <b>é gente diferente</b>. Entrou a unidade de Dourados. Ação: retreinar incorporando, promover a v2.',
+      semPortao: 'As 1.400 linhas entram e são pontuadas pela v1, que não conhece Dourados. A lista sai errada e <b>ninguém percebe até o rótulo chegar, três meses depois</b>.'
+    },
+    mar: {
+      titulo: 'lote_aula3_mar',
+      razoes: ['60,0 e 100,0 — exatas, redondas', 'ruim'],
+      zeros:  ['16,4% → 16,4%: idênticos nas quinze', 'bom'],
+      ks:     ['maior 0,676 — 2 features do mesmo bloco', 'ruim'],
+      reprovado: true,
+      retido: 'Retido. Nenhuma linha virou predição. O arquivo espera uma pessoa.',
+      humano: 'Razão redonda com zeros parados e contagem intacta: <b>é a mesma gente medida com outra régua</b>. Ação: consertar o export na origem. Nenhuma versão nova.',
+      semPortao: 'As 1.400 linhas entram com valores 60× e 100× maiores. A faixa de alerta cai de 165 para <b>72</b>, e a Marina trabalha a lista errada por um mês inteiro.'
+    }
+  };
+
+  const pacote  = raiz.querySelector('#ps-pacote');
+  const portao  = raiz.querySelector('#ps-portao');
+  const subPort = raiz.querySelector('#ps-portao-sub');
+  const quar    = raiz.querySelector('#ps-quar');
+  const quarN   = raiz.querySelector('#ps-quar-n');
+  const saida   = raiz.querySelector('#ps-saida');
+  const ligado  = raiz.querySelector('#ps-ligado');
+  const botoes  = [...raiz.querySelectorAll('.ps-arq')];
+
+  let retidos = 0;
+  let relogios = [];
+  const limpar = () => { relogios.forEach(clearTimeout); relogios = []; };
+  const daqui = (ms, fn) => relogios.push(setTimeout(fn, ms));
+
+  function linha(rot, par){
+    return `<div class="ps-linha"><div class="ps-rot">${rot}</div>` +
+           `<div class="ps-val ${par[1]}">${par[0]}</div></div>`;
+  }
+
+  function rodar(chave){
+    limpar();
+    const d = DADOS[chave];
+    const on = ligado.checked;
+    const barra = on && d.reprovado;
+
+    botoes.forEach(b => b.classList.toggle('ativo', b.dataset.lote === chave));
+    portao.className = 'ps-portao' + (on ? '' : ' desligado');
+    subPort.textContent = on ? 'contrato' : 'sem contrato';
+    pacote.className = 'ps-pacote' + (d.reprovado ? ' ruim' : '');
+    pacote.style.transition = 'none';
+    pacote.style.left = '11%';
+    pacote.style.top = '31px';
+    pacote.style.opacity = '0';
+    saida.innerHTML = '<p class="ps-vazio">…</p>';
+
+    daqui(40, () => {
+      pacote.style.transition = '';
+      pacote.style.opacity = '1';
+      pacote.style.left = '50%';          // posicoes em %: funcionam mesmo com
+    });                                    // o slide ainda oculto
+
+    daqui(1150, () => {
+      portao.classList.add(on ? (barra ? 'fechado' : 'aberto') : 'desligado');
+      let html = linha('razão de média', d.razoes) + linha('zeros', d.zeros) + linha('ks', d.ks);
+
+      if(barra){
+        pacote.style.top = '106px';
+        daqui(760, () => { pacote.style.opacity = '0'; });
+        retidos++;
+        quar.classList.add('cheia');
+        quarN.textContent = retidos === 1 ? '1 lote retido · ' + d.titulo
+                                          : retidos + ' lotes retidos';
+        html += `<div class="ps-fecho retido"><b>${d.retido}</b></div>`;
+        if(d.humano) html += `<div class="ps-fecho passou"><b>A pessoa olha e decide:</b> ${d.humano}</div>`;
+      } else {
+        pacote.style.left = '89%';
+        if(!on && d.reprovado){
+          html += `<div class="ps-fecho perigo"><b>Sem portão:</b> ${d.semPortao}</div>`;
+        } else if(!on){
+          html += `<div class="ps-fecho passou">${d.semPortao}</div>`;
+        } else {
+          html += `<div class="ps-fecho passou">${d.passou}</div>`;
+        }
+      }
+      saida.innerHTML = html;
+    });
+  }
+
+  botoes.forEach(b => b.onclick = () => rodar(b.dataset.lote));
+  ligado.onchange = () => {
+    const ativo = raiz.querySelector('.ps-arq.ativo');
+    rodar(ativo ? ativo.dataset.lote : 'mar');
+  };
+  rodar('mar');
+})();
+</script>
+</body>
+</html>
